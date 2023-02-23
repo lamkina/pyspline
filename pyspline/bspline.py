@@ -7,13 +7,14 @@ from scipy.sparse import linalg
 
 # Local modules
 from . import libspline
+from .spline import Spline
 from .utils import Error, _assembleMatrix, checkInput, closeTecplot, openTecplot, writeTecplot1D
 
 
-class BSplineCurve(object):
-    def __init__(self, degree: int, knotVec: np.ndarray, ctlPntVec: np.ndarray) -> None:
+class BSplineCurve(Spline):
+    def __init__(self, degree: int, knotVec: np.ndarray, ctrlPnts: np.ndarray) -> None:
         self.degree = degree
-        self.ctlPntVec = ctlPntVec
+        self.ctrlPnts = ctrlPnts
         self.knotVec = knotVec
 
         # Attributes we will use in methods
@@ -21,17 +22,15 @@ class BSplineCurve(object):
         self.sdata = None
         self.u = None  # Parametric coordinate vector
 
-        # Attributes to identify the curve
-        self.name = None
-        self.tag = None
+        super(BSplineCurve, self).__init__()
 
     @property
     def nCtl(self) -> int:
-        return self.ctlPntVec.shape[0]
+        return self.ctrlPnts.shape[0]
 
     @property
     def nDim(self) -> int:
-        return self.ctlPntVec.shape[1]
+        return self.ctrlPnts.shape[1]
 
     @property
     def degree(self) -> int:
@@ -56,17 +55,17 @@ class BSplineCurve(object):
             )
 
     @property
-    def ctlPntVec(self) -> np.ndarray:
-        return self._ctlPntVec
+    def ctrlPnts(self) -> np.ndarray:
+        return self._ctrlPnts
 
-    @ctlPntVec.setter
-    def ctlPntVec(self, ctlPntVec: np.ndarray) -> None:
-        if ctlPntVec.ndim >= 2:
-            self._ctlPntVec = ctlPntVec
+    @ctrlPnts.setter
+    def ctrlPnts(self, ctrlPnts: np.ndarray) -> None:
+        if ctrlPnts.ndim >= 2:
+            self._ctrlPnts = ctrlPnts
         else:
             raise ValueError(
                 "Control point vector must be a 2D array of shape (nCtl, nDim). "
-                f"The input control point vector was shape: {ctlPntVec.shape}"
+                f"The input control point vector was shape: {ctrlPnts.shape}"
             )
 
     def getValue(self, u: np.ndarray) -> np.ndarray:
@@ -87,10 +86,10 @@ class BSplineCurve(object):
             array of size (N, 3) (or size (N) if ndim=1)
         """
         u = u.T
-        if self.ctlPntVec.dtype == np.dtype("d"):
-            vals = libspline.eval_curve(np.atleast_1d(u), self.knotVec, self.degree, self.ctlPntVec.T)
+        if self.ctrlPnts.dtype == np.dtype("d"):
+            vals = libspline.eval_curve(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPnts.T)
         else:
-            vals = libspline.eval_curve_c(np.atleast_1d(u).astype("D"), self.knotVec, self.degree, self.ctlPntVec.T)
+            vals = libspline.eval_curve_c(np.atleast_1d(u).astype("D"), self.knotVec, self.degree, self.ctrlPnts.T)
 
         return vals.squeeze().T
 
@@ -123,11 +122,11 @@ class BSplineCurve(object):
         self.sdata = np.array(s)
 
 
-class BSplineSurface(object):
-    def __init__(self, uDegree: int, vDegree: int, ctlPntVec: np.ndarray, uKnotVec: np.ndarray, vKnotVec: np.ndarray):
+class BSplineSurface(Spline):
+    def __init__(self, uDegree: int, vDegree: int, ctrlPnts: np.ndarray, uKnotVec: np.ndarray, vKnotVec: np.ndarray):
         self.uDegree = uDegree
         self.vDegree = vDegree
-        self.ctlPntVec = ctlPntVec
+        self.ctrlPnts = ctrlPnts
         self.uKnotVec = uKnotVec
         self.vKnotVec = vKnotVec
 
@@ -137,16 +136,16 @@ class BSplineSurface(object):
         self.U = None
         self.V = None
         self.edgeCurves: List[BSplineCurve] = [None, None, None, None]
-        self.name = None
-        self.tag = None
+
+        super(BSplineSurface, self).__init__()
 
     @property
     def nCtlu(self) -> int:
-        return self.ctlPntVec.shape[0]
+        return self.ctrlPnts.shape[0]
 
     @property
     def nCtlv(self) -> int:
-        return self.ctlPntVec.shape[1]
+        return self.ctrlPnts.shape[1]
 
     @property
     def umin(self) -> float:
@@ -166,7 +165,7 @@ class BSplineSurface(object):
 
     @property
     def nDim(self) -> int:
-        return self.ctlPntVec.shape[2]
+        return self.ctrlPnts.shape[2]
 
     @property
     def uDegree(self) -> int:
@@ -213,25 +212,25 @@ class BSplineSurface(object):
             )
 
     @property
-    def ctlPntVec(self) -> np.ndarray:
-        return self._ctlPntVec
+    def ctrlPnts(self) -> np.ndarray:
+        return self._ctrlPnts
 
-    @ctlPntVec.setter
-    def ctlPntVec(self, ctlPntVec: np.ndarray) -> None:
-        if ctlPntVec.ndim >= 2:
-            self._ctlPntVec = ctlPntVec
+    @ctrlPnts.setter
+    def ctrlPnts(self, ctrlPnts: np.ndarray) -> None:
+        if ctrlPnts.ndim >= 2:
+            self._ctrlPnts = ctrlPnts
         else:
             raise ValueError(
                 "Control point vector must be a 2D array of shape (nCtlu, nCtlv, nDim). "
-                f"The input control point vector was shape: {ctlPntVec.shape}"
+                f"The input control point vector was shape: {ctrlPnts.shape}"
             )
 
     def setEdgeCurves(self) -> None:
         """Create curve spline objects for each of the edges"""
-        self.edgeCurves[0] = BSplineCurve(degree=self.uDegree, knotVec=self.uKnotVec, ctlPntVec=self.ctlPntVec[:, 0])
-        self.edgeCurves[1] = BSplineCurve(degree=self.uDegree, knotVec=self.uKnotVec, ctlPntVec=self.ctlPntVec[:, -1])
-        self.edgeCurves[2] = BSplineCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctlPntVec=self.ctlPntVec[0, :])
-        self.edgeCurves[3] = BSplineCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctlPntVec=self.ctlPntVec[-1, :])
+        self.edgeCurves[0] = BSplineCurve(degree=self.uDegree, knotVec=self.uKnotVec, ctrlPnts=self.ctrlPnts[:, 0])
+        self.edgeCurves[1] = BSplineCurve(degree=self.uDegree, knotVec=self.uKnotVec, ctrlPnts=self.ctrlPnts[:, -1])
+        self.edgeCurves[2] = BSplineCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctrlPnts=self.ctrlPnts[0, :])
+        self.edgeCurves[3] = BSplineCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctrlPnts=self.ctrlPnts[-1, :])
 
     def getValueEdge(self, edgeIdx: int, u: np.ndarray) -> np.ndarray:
         curve = self.edgeCurves[edgeIdx]
@@ -251,7 +250,7 @@ class BSplineSurface(object):
             return self.getValue(self.umax, self.vmax)
 
     def getValue(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
-        """Evaluate the spline surface at parametric positions u,v. This is the
+        """Evaluate the b-spline surface at parametric positions u,v. This is the
         main function for spline evaluation.
 
         Parameters
@@ -276,7 +275,7 @@ class BSplineSurface(object):
 
         u = np.atleast_2d(u)
         v = np.atleast_2d(v)
-        vals = libspline.eval_surface(u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctlPntVec.T)
+        vals = libspline.eval_surface(u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T)
         return vals.squeeze().T
 
     def __call__(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -308,7 +307,7 @@ class BSplineSurface(object):
             raise ValueError("'getDerivative' only accepts scalar arguments.")
 
         deriv = libspline.eval_surface_deriv(
-            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctlPntVec.T
+            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T
         )
         return deriv.T
 
@@ -338,7 +337,7 @@ class BSplineSurface(object):
             raise ValueError("'getDerivative' only accepts scalar arguments.")
 
         deriv = libspline.eval_surface_deriv2(
-            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctlPntVec.T
+            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T
         )
         return deriv.T
 
@@ -355,9 +354,9 @@ class BSplineSurface(object):
         if self.nDim != 3:
             raise Error("getBounds is only defined for nDim = 3")
 
-        cx = self.ctlPntVec[:, :, 0].flatten()
-        cy = self.ctlPntVec[:, :, 1].flatten()
-        cz = self.ctlPntVec[:, :, 2].flatten()
+        cx = self.ctrlPnts[:, :, 0].flatten()
+        cy = self.ctrlPnts[:, :, 1].flatten()
+        cz = self.ctrlPnts[:, :, 2].flatten()
 
         Xmin = np.array([min(cx), min(cy), min(cz)])
         Xmax = np.array([max(cx), max(cy), max(cz)])
@@ -365,6 +364,6 @@ class BSplineSurface(object):
         return Xmin, Xmax
 
 
-class BSplineVolume(object):
+class BSplineVolume(Spline):
     def __init__(self):
-        pass
+        super(BSplineVolume, self).__init__()

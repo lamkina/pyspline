@@ -170,7 +170,7 @@ def lmsFitCurve(
     knotVec = computeKnotVectorLMS(degree, u, nCtl)
 
     # Create a matrix to hold the control point coefficients
-    ctlPntVec = np.zeros((nCtl, nDim), "d")
+    ctrlPnts = np.zeros((nCtl, nDim), "d")
 
     # Build the 'N' jacobian
     nVals = np.zeros((ns + nuds) * degree)
@@ -200,7 +200,7 @@ def lmsFitCurve(
         if nt + nudt == 0:
             solve = linalg.factorized(NTWN)
             for idim in range(nDim):
-                ctlPntVec[:, idim] = solve(N.transpose() * W * S[:, idim])
+                ctrlPnts[:, idim] = solve(N.transpose() * W * S[:, idim])
 
         # More complicated because we have constraints
         # *** Only works with scipy sparse matrices ***
@@ -236,13 +236,13 @@ def lmsFitCurve(
             solve = linalg.factorized(J)
             for idim in range(nDim):
                 rhs = np.hstack((N.transpose() * W * S[:, idim], T[:, idim]))
-                ctlPntVec[:, idim] = solve(rhs)[0:nCtl]
+                ctrlPnts[:, idim] = solve(rhs)[0:nCtl]
 
         # Run the parameteric correction
-        libspline.curve_para_corr(knotVec, degree, u, ctlPntVec.T, length, points.T)
+        libspline.curve_para_corr(knotVec, degree, u, ctrlPnts.T, length, points.T)
 
     # Create the BSpline curve
-    curve = BSplineCurve(degree, knotVec, ctlPntVec)
+    curve = BSplineCurve(degree, knotVec, ctrlPnts)
     curve.calcGrevillePoints()
     return curve
 
@@ -334,7 +334,7 @@ def interpolateCurve(
         degree = nPts + nderivPts
 
     # Build the coefficient matrix for the interpolation linear system
-    ctlPntVec = np.zeros((nCtl, nDim), "d")
+    ctrlPnts = np.zeros((nCtl, nDim), "d")
     nVals = np.zeros((nPts + nderivPts) * degree)
     nRowPtr = np.zeros(nPts + nderivPts + 1, "intc")
     nColInd = np.zeros((nPts + nderivPts) * degree, "intc")
@@ -344,10 +344,10 @@ def interpolateCurve(
     # Factorize once for efficiency
     solve = linalg.factorized(N)
     for idim in range(nDim):
-        ctlPntVec[:, idim] = solve(S[:, idim])
+        ctrlPnts[:, idim] = solve(S[:, idim])
 
     # Create the BSplineCurve
-    curve = BSplineCurve(degree, knotVec, ctlPntVec)
+    curve = BSplineCurve(degree, knotVec, ctrlPnts)
     curve.calcGrevillePoints()
     return curve
 
@@ -461,7 +461,7 @@ def lmsFitSurface(
     vKnotVec = computeKnotVectorLMS(vDegree, v, nCtlv)
 
     # Create the control points
-    ctlPntVec = np.zeros((nCtlu, nCtlv, nDim))
+    ctrlPnts = np.zeros((nCtlu, nCtlv, nDim))
 
     # Compute the surface
     vals, rowPtr, colInd = libspline.surface_jacobian_wrap(U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv)
@@ -473,10 +473,10 @@ def lmsFitSurface(
     solve = linalg.factorized(NT * N)
     for idim in range(nDim):
         rhs = NT * points[:, :, idim].flatten()
-        ctlPntVec[:, :, idim] = solve(rhs).reshape((nCtlu, nCtlv))
+        ctrlPnts[:, :, idim] = solve(rhs).reshape((nCtlu, nCtlv))
 
     # Create the BSpline surface
-    surface = BSplineSurface(uDegree, vDegree, ctlPntVec, uKnotVec, vKnotVec)
+    surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
     surface.setEdgeCurves()
 
     # Return the surface
@@ -533,7 +533,7 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
     vKnotVec = computeKnotVectorInterp(vDegree, np.array([], "d"), v)
 
     # Initialize the control points
-    ctlPntVec = np.zeros((nCtlu, nCtlv, nDim))
+    ctrlPnts = np.zeros((nCtlu, nCtlv, nDim))
 
     # Compute the surface
     vals, rowPtr, colInd = libspline.surface_jacobian_wrap(U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv)
@@ -543,10 +543,10 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
     # point vector
     solve = linalg.factorized(N)
     for idim in range(nDim):
-        ctlPntVec[:, :, idim] = solve(points[:, :, idim].flatten()).reshape((nCtlu, nCtlv))
+        ctrlPnts[:, :, idim] = solve(points[:, :, idim].flatten()).reshape((nCtlu, nCtlv))
 
     # Create the BSpline surface
-    surface = BSplineSurface(uDegree, vDegree, ctlPntVec, uKnotVec, vKnotVec)
+    surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
     surface.setEdgeCurves()
 
     # Return the surface

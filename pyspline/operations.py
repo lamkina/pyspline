@@ -63,11 +63,11 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:
             u = checkInput(param[0], "u", float, 0)
             r = checkInput(num[0], "r", int, 0)
 
-            actualR, knotVecNew, ctlPntVecNew, breakPnt = libspline.insertKnot(
-                u, r, geo.knotVec, geo.degree, geo.ctlPntVec.T
+            actualR, knotVecNew, ctrlPntsNew, breakPnt = libspline.insertKnot(
+                u, r, geo.knotVec, geo.degree, geo.ctrlPnts.T
             )
             geo.knotVec = knotVecNew[0 : geo.nCtl + geo.degree + actualR]
-            geo.ctlPntVec = ctlPntVecNew[:, 0 : geo.nCtl + actualR].T
+            geo.ctrlPnts = ctrlPntsNew[:, 0 : geo.nCtl + actualR].T
             geo.nCtl = geo.nCtl + actualR
 
             # Convert breakPnt back to zero based ordering
@@ -84,21 +84,21 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:
             elif s >= 1.0:
                 return
 
-            actualR, knotVecNew, ctlPntVecNew, breakPnt = libspline.insertknot(
-                s, r, geo.uKnotVec, geo.uDegree, geo.ctlPntVec[:, 0].T
+            actualR, knotVecNew, ctrlPntsNew, breakPnt = libspline.insertknot(
+                s, r, geo.uKnotVec, geo.uDegree, geo.ctrlPnts[:, 0].T
             )
-            newCtlPntVec = np.zeros((geo.nCtlu + actualR, geo.nCtlv, geo.nDim))
+            newctrlPnts = np.zeros((geo.nCtlu + actualR, geo.nCtlv, geo.nDim))
 
             for j in range(geo.nCtlv):
                 actualR, knotVecNew, ctlPntSlice, breakPnt = libspline.insertknot(
-                    s, r, geo.uKnotVec, geo.uDegree, geo.ctlPntVec[:, j].T
+                    s, r, geo.uKnotVec, geo.uDegree, geo.ctrlPnts[:, j].T
                 )
-                newCtlPntVec[:, j] = ctlPntSlice[:, 0 : geo.nCtlu + actualR].T
+                newctrlPnts[:, j] = ctlPntSlice[:, 0 : geo.nCtlu + actualR].T
 
             geo.uKnotVec = knotVecNew[0 : geo.nCtlu + geo.uDegree + actualR]
             geo.nCtlu = geo.nCtlu + actualR
 
-            geo.ctlPntVec = newCtlPntVec
+            geo.ctrlPnts = newctrlPnts
 
         # v-direction
         if param[1] is not None and num[1] > 0:
@@ -110,22 +110,22 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:
             elif s >= 1.0:
                 return
 
-            actualR, knotVecNew, ctlPntVecNew, breakPnt = libspline.insertknot(
-                s, r, geo.vKnotVec, geo.vDegree, geo.ctlPntVec[0, :].T
+            actualR, knotVecNew, ctrlPntsNew, breakPnt = libspline.insertknot(
+                s, r, geo.vKnotVec, geo.vDegree, geo.ctrlPnts[0, :].T
             )
 
             newCoef = np.zeros((geo.nCtlu, geo.nCtlv + actualR, geo.nDim))
 
             for i in range(geo.nCtlu):
                 actualR, knotVecNew, coefSlice, breakPnt = libspline.insertknot(
-                    s, r, geo.vKnotVec, geo.vDegree, geo.ctlPntVec[i, :].T
+                    s, r, geo.vKnotVec, geo.vDegree, geo.ctrlPnts[i, :].T
                 )
                 newCoef[i, :] = coefSlice[:, 0 : geo.nCtlv + actualR].T
 
             geo.vKnotVec = knotVecNew[0 : geo.nCtlv + geo.vDegree + actualR]
             geo.nCtlv = geo.nCtlv + actualR
 
-            geo.ctlPntVec = newCtlPntVec
+            geo.ctrlPnts = newctrlPnts
 
         # Convert breakPnt back to zero based ordering
         return actualR, breakPnt - 1
@@ -161,13 +161,13 @@ def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BS
     # Check the bounds
     if param <= 0:
         return None, BSplineSurface(
-            surf.uDegree, surf.vDegree, surf.ctlPntVec.copy(), surf.uKnotVec.copy(), surf.vKnotVec.copy()
+            surf.uDegree, surf.vDegree, surf.ctrlPnts.copy(), surf.uKnotVec.copy(), surf.vKnotVec.copy()
         )
 
     if param >= 1.0:
         return (
             BSplineSurface(
-                surf.uDegree, surf.vDegree, surf.ctlPntVec.copy(), surf.uKnotVec.copy(), surf.vKnotVec.copy()
+                surf.uDegree, surf.vDegree, surf.ctrlPnts.copy(), surf.uKnotVec.copy(), surf.vKnotVec.copy()
             ),
             None,
         )
@@ -185,12 +185,12 @@ def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BS
         knotVec1 = np.hstack((surf.uKnotVec[0 : breakPnt + surf.uDegree - 1].copy(), knot)) / knot
         knotVec2 = (np.hstack((knot, surf.uKnotVec[breakPnt:].copy())) - knot) / (1.0 - knot)
 
-        ctlPntVec1 = surf.ctlPntVec[0:breakPnt, :, :].copy()
-        ctlPntVec2 = surf.ctlPntVec[breakPnt - 1 :, :, :].copy()
+        ctrlPnts1 = surf.ctrlPnts[0:breakPnt, :, :].copy()
+        ctrlPnts2 = surf.ctrlPnts[breakPnt - 1 :, :, :].copy()
 
         return (
-            BSplineSurface(surf.uDegree, surf.vDegree, ctlPntVec1, knotVec1, surf.vKnotVec),
-            BSplineSurface(surf.uDegree, surf.vDegree, ctlPntVec2, knotVec2, surf.vKnotVec),
+            BSplineSurface(surf.uDegree, surf.vDegree, ctrlPnts1, knotVec1, surf.vKnotVec),
+            BSplineSurface(surf.uDegree, surf.vDegree, ctrlPnts2, knotVec2, surf.vKnotVec),
         )
 
     # Splitting in the v-direction
@@ -206,12 +206,12 @@ def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BS
         knotVec1 = np.hstack((surf.vKnotVec[0 : breakPnt + surf.vDegree - 1].copy(), knot)) / knot
         knotVec2 = (np.hstack((knot, surf.vKnotVec[breakPnt:].copy())) - knot) / (1.0 - knot)
 
-        ctlPntVec1 = surf.ctlPntVec[:, 0:breakPnt, :].copy()
-        ctlPntVec2 = surf.ctlPntVec[:, breakPnt - 1 :, :].copy()
+        ctrlPnts1 = surf.ctrlPnts[:, 0:breakPnt, :].copy()
+        ctrlPnts2 = surf.ctrlPnts[:, breakPnt - 1 :, :].copy()
 
         return (
-            BSplineSurface(surf.uDegree, surf.vDegree, ctlPntVec1, surf.uKnotVec, knotVec1),
-            BSplineSurface(surf.uDegree, surf.vDegree, ctlPntVec2, surf.uKnotVec, knotVec2),
+            BSplineSurface(surf.uDegree, surf.vDegree, ctrlPnts1, surf.uKnotVec, knotVec1),
+            BSplineSurface(surf.uDegree, surf.vDegree, ctrlPnts2, surf.uKnotVec, knotVec2),
         )
 
 
@@ -263,8 +263,8 @@ def reverseCurve(curve: BSplineCurve) -> None:
     curve : BSplineCurve
         The curve to be reversed.
     """
-    curve.ctlPntVec = curve.ctlPntVec[::-1, :]
-    curve.knotVec = 1 - curve.ctlPntVec[::-1]
+    curve.ctrlPnts = curve.ctrlPnts[::-1, :]
+    curve.knotVec = 1 - curve.ctrlPnts[::-1]
 
 
 def splitCurve(curve: BSplineCurve, u: float) -> Tuple[BSplineCurve]:
@@ -295,10 +295,10 @@ def splitCurve(curve: BSplineCurve, u: float) -> Tuple[BSplineCurve]:
     u = checkInput(u, "u", float, 0)
 
     if u <= 0.0:
-        return None, BSplineCurve(curve.degree, curve.knotVec.copy(), curve.ctlPntVec.copy())
+        return None, BSplineCurve(curve.degree, curve.knotVec.copy(), curve.ctrlPnts.copy())
 
     if u >= 1.0:
-        return BSplineCurve(curve.degree, curve.knotVec.copy(), curve.ctlPntVec.copy()), None
+        return BSplineCurve(curve.degree, curve.knotVec.copy(), curve.ctrlPnts.copy()), None
 
     _, breakPnt = insertKnot(curve, [u, None], [curve.degree - 1, 0])
 
@@ -309,10 +309,10 @@ def splitCurve(curve: BSplineCurve, u: float) -> Tuple[BSplineCurve]:
     newKnotVec1 = np.hstack((curve.knotVec[0 : breakPnt + curve.degree - 1].copy(), knot)) / knot
     newKnotVec2 = (np.hstack((knot, curve.knotVec[breakPnt:].copy())) - knot) / (1.0 - knot)
 
-    ctlPntVec1 = curve.ctlPntVec[0:breakPnt, :].copy()
-    ctlPntVec2 = curve.ctlPntVec[breakPnt - 1 :, :].copy()
+    ctrlPnts1 = curve.ctrlPnts[0:breakPnt, :].copy()
+    ctrlPnts2 = curve.ctrlPnts[breakPnt - 1 :, :].copy()
 
-    return BSplineCurve(curve.degree, newKnotVec1, ctlPntVec1), BSplineCurve(curve.degree, newKnotVec2, ctlPntVec2)
+    return BSplineCurve(curve.degree, newKnotVec1, ctrlPnts1), BSplineCurve(curve.degree, newKnotVec2, ctrlPnts2)
 
 
 def getMultiplicity(knot: float, knotVec: np.ndarray, tol: float = 1e-10) -> int:

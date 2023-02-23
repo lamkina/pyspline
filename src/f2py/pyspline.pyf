@@ -217,6 +217,22 @@
        complex*16 dimension(ndim), intent(out), depend(ndim) :: val
      end subroutine eval_curve_deriv2_c
 
+     subroutine evalsurfacenurbs(u, v, tu, tv, ku, kv, pw, nctlu, nctlv, ndim, n, m, val) ! in :test:evalsurfacenurbs.f90
+       real(kind=realtype) dimension(m, n), intent(in) :: u
+       real(kind=realtype) dimension(m, n), intent(in), depend(m, n) :: v
+       real(kind=realtype) dimension(nctlu+ku), intent(in), depend(ku, nctlu) :: tu
+       real(kind=realtype) dimension(nctlv+kv), intent(in), depend(kv, nctlv) :: tv
+       integer intent(in) :: ku
+       integer intent(in) :: kv
+       real(kind=realtype) dimension(ndim+1, nctlv, nctlu), intent(in) :: pw
+       integer optional, intent(in), check(shape(pw, 2)==nctlu), depend(pw) :: nctlu=shape(pw, 2)
+       integer optional, intent(in), check(shape(pw, 1)==nctlv), depend(pw) :: nctlv=shape(pw, 1)
+       integer optional, intent(in), check(shape(pw, 0)==ndim+1), depend(pw) :: ndim=(shape(pw, 0)-1)
+       integer optional, intent(in), check(shape(u, 1)==n), depend(u) :: n=shape(u, 1)
+       integer optional, intent(in), check(shape(u, 0)==m), depend(u) :: m=shape(u, 0)
+       real(kind=realtype) dimension(ndim, m, n), intent(out), depend(ndim, m, n) :: val
+     end subroutine evalsurfacenurbs
+
      subroutine eval_surface(u, v, tu, tv, ku, kv, coef, nctlu, nctlv, ndim, n, m, val) ! in :test:eval_surface.f90
        real(kind=realtype) dimension(m, n), intent(in) :: u
        real(kind=realtype) dimension(m, n), intent(in), depend(m, n) :: v
