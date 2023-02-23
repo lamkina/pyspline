@@ -144,6 +144,17 @@
        integer dimension(nu*nv*nw*ku*kv*kw), intent(out), depend(ku, kv, kw, nu, nv, nw) :: col_ind
      end subroutine volume_jacobian_wrap
 
+     subroutine evalcurvenurbs(s,t,k,pw,nctl,ndim,n,val) ! in evalCurveNURBS.f90
+         real(kind=realtype) dimension(n),intent(in) :: s
+         real(kind=realtype) dimension(nctl+k),intent(in),depend(k,nctl) :: t
+         integer intent(in) :: k
+         real(kind=realtype) dimension(ndim + 1,nctl),intent(in) :: pw
+         integer, optional,intent(in),check(shape(pw,1)==nctl),depend(pw) :: nctl=shape(pw,1)
+         integer, optional,intent(in),check((shape(pw,0)-1)==ndim),depend(pw) :: ndim=(shape(pw,0)-1)
+         integer, optional,intent(in),check(len(s)>=n),depend(s) :: n=len(s)
+         real(kind=realtype) dimension(ndim,n),intent(out),depend(ndim,n) :: val
+     end subroutine evalcurvenurbs
+
      subroutine eval_curve(s, t, k, coef, nctl, ndim, n, val) ! in :test:eval_curve.f90
        real(kind=realtype) dimension(n), intent(in) :: s
        real(kind=realtype) dimension(nctl+k), intent(in), depend(k, nctl) :: t

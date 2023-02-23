@@ -25,6 +25,7 @@ OBJS =  evaluations.o\
 	compute_surface.o\
 	compute_volume.o\
 	eval_curve.o\
+	evalCurveNURBS.o\
 	eval_surface.o\
 	eval_volume.o\
 	projections.o\
