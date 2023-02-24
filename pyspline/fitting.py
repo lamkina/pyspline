@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 # External modules
 import numpy as np
-from scipy import linalg, sparse
+from scipy.sparse import linalg, csr_matrix
 
 # Local modules
 from . import libspline
@@ -160,7 +160,7 @@ def lmsFitCurve(
 
     # Create a sparse CSR matrix to hold the weights
     nw = len(weights)  # length of the weights
-    W = sparse.csr_matrix((weights, np.arange(nw), np.arange(nw + 1)), (nw, nw))
+    W = csr_matrix((weights, np.arange(nw), np.arange(nw + 1)), (nw, nw))
 
     # Sanity check to make sure the degree is ok
     if ns + nt + nuds + nudt < degree:
@@ -177,7 +177,7 @@ def lmsFitCurve(
     nRowPtr = np.zeros(ns + nuds + 1, "intc")
     nColInd = np.zeros((ns + nuds) * degree, "intc")
     libspline.curve_jacobian_wrap(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nRowPtr, nColInd)
-    N = sparse.csr_matrix((nVals, nColInd, nRowPtr), (ns + nuds, nCtl)).tocsc()
+    N = csr_matrix((nVals, nColInd, nRowPtr), (ns + nuds, nCtl)).tocsc()
 
     length = libspline.poly_length(points.T)
 
@@ -210,7 +210,7 @@ def lmsFitCurve(
             mColInd = np.zeros((nt + nudt) * degree, "intc")
 
             libspline.curve_jacobian_wrap(ut, udt, knotVec, degree, nCtl, mVals, mRowPtr, mColInd)
-            M = sparse.csr_matrix((mVals, mColInd, mRowPtr), (nt + nudt, nCtl))
+            M = csr_matrix((mVals, mColInd, mRowPtr), (nt + nudt, nCtl))
 
             # Now we must assemble the constrained jacobian
             # [ N^T*W*T      M^T][P] = [ N^T*W*S]
@@ -232,7 +232,7 @@ def lmsFitCurve(
             )
 
             # Create sparse csr matrix and factorize
-            J = sparse.csr_matrix((jVal, jColInd, jRowPtr), (nCtl + nt + nudt, nCtl + nt + nudt))
+            J = csr_matrix((jVal, jColInd, jRowPtr), (nCtl + nt + nudt, nCtl + nt + nudt))
             solve = linalg.factorized(J)
             for idim in range(nDim):
                 rhs = np.hstack((N.transpose() * W * S[:, idim], T[:, idim]))
@@ -244,6 +244,7 @@ def lmsFitCurve(
     # Create the BSpline curve
     curve = BSplineCurve(degree, knotVec, ctrlPnts)
     curve.calcGrevillePoints()
+    curve.X = points
     return curve
 
 
@@ -339,7 +340,7 @@ def interpolateCurve(
     nRowPtr = np.zeros(nPts + nderivPts + 1, "intc")
     nColInd = np.zeros((nPts + nderivPts) * degree, "intc")
     libspline.curve_jacobian_wrap(u, uderiv, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
-    N = sparse.csr_matrix((nVals, nColInd, nRowPtr), (nPts, nPts)).tocsc()
+    N = csr_matrix((nVals, nColInd, nRowPtr), (nPts, nPts)).tocsc()
 
     # Factorize once for efficiency
     solve = linalg.factorized(N)
@@ -349,6 +350,7 @@ def interpolateCurve(
     # Create the BSplineCurve
     curve = BSplineCurve(degree, knotVec, ctrlPnts)
     curve.calcGrevillePoints()
+    curve.X = points
     return curve
 
 
@@ -465,7 +467,7 @@ def lmsFitSurface(
 
     # Compute the surface
     vals, rowPtr, colInd = libspline.surface_jacobian_wrap(U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv)
-    N = sparse.csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv))
+    N = csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv))
     NT = N.transpose()
 
     # Factorize and solve the sparse linear system to get the control
@@ -478,6 +480,7 @@ def lmsFitSurface(
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
     surface.setEdgeCurves()
+    surface.X = points
 
     # Return the surface
     return surface
@@ -537,7 +540,7 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
 
     # Compute the surface
     vals, rowPtr, colInd = libspline.surface_jacobian_wrap(U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv)
-    N = sparse.csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv))
+    N = csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv))
 
     # Factorize and solve the sparse linear system to get the control
     # point vector
@@ -548,6 +551,7 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
     surface.setEdgeCurves()
+    surface.X = points
 
     # Return the surface
     return surface

@@ -8,9 +8,7 @@ import numpy as np
 from . import libspline
 from .bspline import BSplineCurve, BSplineSurface, BSplineVolume
 from .utils import checkInput
-
-# --- Define a type for all geometric objects ---
-GEOTYPE = Union[BSplineCurve, BSplineSurface, BSplineVolume]
+from .custom_types import GEOTYPE
 
 
 def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:
@@ -380,3 +378,17 @@ def getSurfaceBasisPt(
     return libspline.getbasisptsurface(
         u, v, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, vals, colInd, iStart, lIndex
     )
+
+
+def computeCurveData(curve: BSplineCurve):
+    curve.calcInterpolatedGrevillePoints()
+    return curve(curve.sdata)
+
+
+def computeSurfaceData(surf: BSplineSurface):
+    surf.edgeCurves[0].calcInterpolatedGrevillePoints()
+    udata = surf.edgeCurves[0].sdata
+    surf.edgeCurves[2].calcInterpolatedGrevillePoints()
+    vdata = surf.edgeCurves[2].sdata
+    V, U = np.meshgrid(vdata, udata)
+    return surf(U, V)
