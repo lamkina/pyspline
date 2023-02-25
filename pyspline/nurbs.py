@@ -18,13 +18,16 @@ def combineCtrlPnts(ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None) 
 
     # Check the input weight array and set the value
     # If weights is None we set them to an array of 1's
-    weights = np.ones((wShape))
     if weights is not None:
-        if weights.shape != wShape:
+        if weights.shape[0] != wShape[0]:
             raise ValueError(
-                f"The shape of the weight array must be {wShape} " "based on the shape of the control point array."
+                f"The shape of the weight array must be {wShape} "
+                "based on the shape of the control point array. "
+                f"The current shape is {weights.shape}."
             )
-        weights = weights
+        weights = weights.reshape(wShape)
+    else:
+        weights = np.ones((wShape))
 
     # Initialize the weighted control points array
     ctrlPntsW = np.append(ctrlPnts, weights, -1)
@@ -38,7 +41,7 @@ def separateCtrlPnts(ctrlPntsW: np.ndarray) -> Tuple[np.ndarray]:
     newShape[-1] = 3
 
     # Flatten out the control points into a 2D array of length nDim + 1
-    temp = ctrlPntsW.reshape(-1, ctrlPntsW[-1])
+    temp = ctrlPntsW.reshape(-1, ctrlPntsW.shape[-1])
 
     # Get the control points
     ctrlPnts = temp[:, :3].reshape(newShape)
@@ -57,23 +60,22 @@ def separateCtrlPnts(ctrlPntsW: np.ndarray) -> Tuple[np.ndarray]:
 
 class NURBSCurve(BSplineCurve):
     def __init__(
-        self, degree: int, knotVec: np.ndarray, ctrlPntsW: np.ndarray, weights: Optional[np.ndarray] = None
+        self, degree: int, knotVec: np.ndarray, ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None
     ) -> None:
         # Initialize the NURBS specific attributes
-        self.ctrlPntsW = ctrlPntsW
+        self.ctrlPntsW = combineCtrlPnts(ctrlPnts, weights)
         self._rational = True
 
         # Initialize the baseclass BSpline object
-        ctrlPnts = separateCtrlPnts(ctrlPntsW)
         super(NURBSCurve, self).__init__(degree, knotVec, ctrlPnts)
 
     @property
     def ctrlPntsW(self) -> np.ndarray:
-        return self.ctrlPntsW
+        return self._ctrlPntsW
 
     @ctrlPntsW.setter
     def ctrlPntsW(self, val: np.ndarray) -> None:
-        self.ctrlPntsW = val
+        self._ctrlPntsW = val
 
     @property
     def ctrlPnts(self) -> np.ndarray:
@@ -121,7 +123,7 @@ class NURBSCurve(BSplineCurve):
         u = u.T
 
         if self.ctrlPntsW.dtype == np.dtype("d"):
-            vals = libspline.evalCurveNURBS(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
+            vals = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
 
         return vals.squeeze().T
 
