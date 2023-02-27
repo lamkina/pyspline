@@ -7,8 +7,8 @@ import numpy as np
 # Local modules
 from . import libspline
 from .bspline import BSplineCurve, BSplineSurface, BSplineVolume
-from .utils import checkInput
 from .custom_types import GEOTYPE
+from .utils import checkInput
 
 
 def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:

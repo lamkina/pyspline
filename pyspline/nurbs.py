@@ -64,10 +64,10 @@ class NURBSCurve(BSplineCurve):
     ) -> None:
         # Initialize the NURBS specific attributes
         self.ctrlPntsW = combineCtrlPnts(ctrlPnts, weights)
-        self._rational = True
 
         # Initialize the baseclass BSpline object
         super(NURBSCurve, self).__init__(degree, knotVec, ctrlPnts)
+        self._rational = True
 
     @property
     def ctrlPntsW(self) -> np.ndarray:
@@ -122,10 +122,9 @@ class NURBSCurve(BSplineCurve):
 
         u = u.T
 
-        if self.ctrlPntsW.dtype == np.dtype("d"):
-            vals = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
+        vals = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
 
-        return vals.squeeze().T
+        return vals.squeeze().T[:, :3]
 
     def __call__(self, u: np.ndarray) -> np.ndarray:
         """Equivalent to `getValue()`

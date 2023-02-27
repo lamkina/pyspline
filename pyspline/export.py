@@ -40,6 +40,8 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             writeTecplot1D(file, "interpolated", data)
         if control_points:
             writeTecplot1D(file, "control_points", geo.ctrlPnts)
+            if geo._rational:
+                writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :3])
         if orig and geo.X is not None:
             writeTecplot1D(file, "orig_data", geo.X)
     elif isinstance(geo, BSplineSurface):

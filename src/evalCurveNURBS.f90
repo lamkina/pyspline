@@ -1,50 +1,46 @@
-subroutine evalCurveNURBS(s, t, k, Pw, nctl, ndim, n, val)
-
-    !***DESCRIPTION
-    !
-    !   Written by Andrew Lamkin
-    !
-    !   A vectorized version of the "CurvePoint" algorithm A4.1 from
-    !   the NURBS book.
-    !
-    !   Description of Arguments:
-    !   Input
-    !   s       - Real, Vector of parameteric coordinates, length n
-    !   t       - Real, Knot vector, length nctl+k
-    !   k       - Integer, Degree of B-spline
-    !   Pw      - Array of weighted control point coefficients, size (ndim+1, nctl)
-    !             One column of Pw=(w*x, w*y, w*z, w) where x, y, and z
-    !             are the locations of the control point coefficients and
-    !             "w" is the weight.
-    !
-    !   Output
-    !   val       - Real, Array of evaluated points, size (ndim, n)
-
+!> Description:
+!>  Evaluates a NURBS curve at the given parameter values using the provided knot vector,
+!>  control points, and weights
+!>
+!> Inputs:
+!>  u         - Real, The parameter values to evaluate the curve at
+!>  knotvec   - Real, The knot vector of the NURBS curve, length (nctl + degree + 1)
+!>  degree    - Integer, The degree of the NURBS curve
+!>  Pw        - Real, The array of control points and weights of the NURBS curve, size (ndim + 1, nctl)
+!>  nctl      - Integer, The number of control points of the NURBS curve
+!>  ndim      - Integer, The dimension of the control points (number of coordinates)
+!>  npts      - Integer, The number of parameter values to evaluate
+!>
+!> Outputs:
+!>  val       - Real, The output array of evaluated points on the curve
+!>
+!> Notes:
+!>  This subroutine assumes that the last coordinate of each control point in the Pw array is its weight.
+subroutine evalCurveNURBS(u, knotvec, degree, Pw, nctl, ndim, npts, val)
     use precision
     implicit none
 
     ! Input
-    integer, intent(in) :: k, nctl, ndim, n
-    real(kind=realType), intent(in) :: s(n)
-    real(kind=realType), intent(in) :: t(nctl + k)
-    real(kind=realType), intent(in) :: Pw(ndim + 1, nctl)
+    integer, intent(in) :: degree, nctl, ndim, npts
+    real(kind=realType), intent(in) :: u(npts)
+    real(kind=realType), intent(in) :: knotvec(nctl + degree + 1)
+    real(kind=realType), intent(in) :: Pw(ndim, nctl)
 
     ! Output
-    real(kind=realType), intent(out) :: val(ndim, n)
+    real(kind=realType), intent(out) :: val(ndim, npts)
 
     ! Working
-    integer :: i, j, idim, istart, ileft
-    real(kind=realType) :: basisu(k)
+    integer :: i, j, istart, ileft
+    real(kind=realType) :: B(degree + 1)
 
     val(:, :) = 0.0
-    do i = 1, n
-        call findSpan(s(i), k, t, nctl, ileft)
-        call basis(t, nctl, k, s(i), ileft, basisu)
-        istart = ileft - k
-        do j = 1, k
-            do idim = 1, ndim
-                val(idim, i) = (val(idim, i) + basisu(j) * Pw(idim, istart + j)) / Pw(4, istart + j)
-            end do
+    do i = 1, npts
+        call findSpan(u(i), degree, knotvec, nctl, ileft)
+        call basis(u(i), degree, knotvec, ileft, nctl, B)
+        istart = ileft - degree
+        do j = 1, degree + 1
+            val(:, i) = val(:, i) + B(j) * Pw(:, istart + j - 1)
         end do
+        val(:, i) = val(:, i) / val(ndim, i)
     end do
 end subroutine evalCurveNURBS

@@ -12,25 +12,13 @@ vpath %.o $(OBJDIR)
 
 # Name of files to be compiled:
 MODS = precision.o\
-       adtProjections.o
 
-OBJS =  evaluations.o\
-	basis.o\
-	knots.o\
-	insertKnot.o\
-	getBasisPt.o\
-	parameterizations.o\
+OBJS =  basis.o\
 	findSpan.o\
-	compute_curve.o\
-	compute_surface.o\
-	compute_volume.o\
-	eval_curve.o\
+	evalCurve.o\
 	evalCurveNURBS.o\
 	evalSurfaceNURBS.o\
-	eval_surface.o\
-	eval_volume.o\
-	projections.o\
-	tfi2d.o\
+	evalSurface.o\
 
 default:
 	$(MAKE) $(MODS)

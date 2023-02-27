@@ -46,12 +46,12 @@ class BSplineCurve(Spline):
 
     @knotVec.setter
     def knotVec(self, knotVec: np.ndarray) -> None:
-        if len(knotVec) == (self.nCtl + self.degree):
+        if len(knotVec) == (self.nCtl + self.degree + 1):
             self._knotVec = knotVec
         else:
             raise ValueError(
                 f"Knot vector is not the correct length. "
-                f"Input length was {len(knotVec)} and it should be length {self.nCtl + self._degree}"
+                f"Input length was {len(knotVec)} and it should be length {self.nCtl + self._degree + 1}"
             )
 
     @property
@@ -86,10 +86,7 @@ class BSplineCurve(Spline):
             array of size (N, 3) (or size (N) if ndim=1)
         """
         u = u.T
-        if self.ctrlPnts.dtype == np.dtype("d"):
-            vals = libspline.eval_curve(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPnts.T)
-        else:
-            vals = libspline.eval_curve_c(np.atleast_1d(u).astype("D"), self.knotVec, self.degree, self.ctrlPnts.T)
+        vals = libspline.evalcurve(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPnts.T)
 
         return vals.squeeze().T
 
@@ -113,7 +110,7 @@ class BSplineCurve(Spline):
         """
         self.calcGrevillePoints()
         s = [self.gpts[0]]
-        N = 2
+        N = 100
         for i in range(len(self.gpts) - 1):
             for j in range(N):
                 s.append((self.gpts[i + 1] - self.gpts[i]) * (j + 1) / (N + 1) + self.gpts[i])
