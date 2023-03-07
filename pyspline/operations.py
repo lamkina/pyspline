@@ -1,4 +1,5 @@
 # Standard Python modules
+from copy import deepcopy
 from typing import List, Tuple, Union
 
 # External modules
@@ -9,6 +10,96 @@ from . import libspline
 from .bspline import BSplineCurve, BSplineSurface, BSplineVolume
 from .custom_types import GEOTYPE
 from .utils import checkInput
+
+
+def degreeElevation(degree: int, ctrlPnts: np.ndarray, num: int):
+    pass
+
+
+def degreeReduction(degree: int, ctrlPnts: np.ndarray):
+    pass
+
+
+def knotRefinement(degree: int, knotVec: np.ndarray, ctrlPnts: np.ndarray, **kwargs):
+    pass
+
+
+def getMultiplicity(knot: float, knotVec: np.ndarray, tol: float = 1e-10) -> int:
+    """Finds the multiplicity of a knot in a given knot vector within
+    a tolerance.
+
+    Parameters
+    ----------
+    knot : float
+        The knot.
+    knotVec : np.ndarray
+        The knot vector.
+    tol : float, optional
+        The tolerance below which two knots are considered equal, by default 1e-10
+
+    Returns
+    -------
+    int
+        The knot multiplicity.
+    """
+    nk = 0
+    for k in knotVec:
+        if abs(k - knot) <= tol:
+            nk += 1
+
+    return nk
+
+
+def curveKnotInsertion(
+    degree: int, knotVec: np.ndarray, ctrlPts: np.ndarray, knot: float, num: int
+) -> Tuple[int, np.ndarray, np.ndarray]:
+    # Initialize useful vars
+    nDim = ctrlPts.shape[-1]
+    nctl = len(ctrlPts)
+    nq = nctl + num
+
+    # Allocate new control points
+    ctrlPtsNew = np.zeros((nq, nDim))
+
+    # Allocate a temporary array
+    temp = np.zeros((degree + 1, nDim))
+
+    # First we need to find the multiplicity of the knot, denoted by "s"
+    s = libspline.multiplicity(knot, knotVec, nctl, degree)
+
+    # Next we need to find the knot span
+    span = libspline.findspan(knot, degree, knotVec, nctl)
+
+    # Load the new knot vector
+    knotVecNew = np.zeros(len(knotVec) + num)
+    knotVecNew[: span + 1] = knotVec[: span + 1]
+    knotVecNew[span + 1 : span + num + 1] = knot
+    knotVecNew[span + num + 1 : nctl + num + degree + 1] = knotVec[span + 1 : nctl + degree + 1]
+
+    # Copy over the unaltered control points
+    ctrlPtsNew[: span - degree + 1, :] = ctrlPts[: span - degree + 1, :]
+    ctrlPtsNew[span - s + num : nctl + num, :] = ctrlPts[span - s : nctl, :]
+
+    for i in range(0, degree - s + 1):
+        temp[i, :] = deepcopy(ctrlPts[span - degree + 1, :])
+
+    # Insert the knot "num" times
+    for j in range(1, num + 1):
+        L = span - degree + j
+        for i in range(0, degree - j - s + 1):
+            alpha = (knot - knotVec[L + i]) / (knotVec[i + span + 1] - knotVec[L + i])
+            temp[i, :] = alpha * temp[i + 1, :] + (1.0 - alpha) * temp[i, :]
+
+        ctrlPtsNew[L] = temp[0, :]
+        ctrlPtsNew[span + num - j - s, :] = temp[degree - j - s, :]
+
+    # Load the remaining control points
+    L = span - degree + num
+    for i in range(L + 1, span - s):
+        ctrlPtsNew[i, :] = temp[i - L, :]
+
+    newSpan = libspline.findspan(knot, degree, knotVecNew, nctl + num)
+    return newSpan, knotVecNew, ctrlPtsNew
 
 
 def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:
@@ -58,24 +149,34 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int]) -> Tuple[int]:
 
     if isinstance(geo, BSplineCurve):
         if param[0] is not None and num[0] > 0:
-            u = checkInput(param[0], "u", float, 0)
-            r = checkInput(num[0], "r", int, 0)
+            knot = checkInput(param[0], "param[0]", float, 0)
+            num = checkInput(num[0], "num[0]", int, 0)
 
-            actualR, knotVecNew, ctrlPntsNew, breakPnt = libspline.insertKnot(
-                u, r, geo.knotVec, geo.degree, geo.ctrlPnts.T
-            )
-            geo.knotVec = knotVecNew[0 : geo.nCtl + geo.degree + actualR]
-            geo.ctrlPnts = ctrlPntsNew[:, 0 : geo.nCtl + actualR].T
-            geo.nCtl = geo.nCtl + actualR
+            # First we need to find the multiplicity of the knot, denoted by "s"
+            s = libspline.multiplicity(knot, geo.knotVec, geo.nCtlnctl, geo.degree)
 
-            # Convert breakPnt back to zero based ordering
-            return actualR, breakPnt - 1
+            # Check if we can add the requested number of knots
+            if num > geo.degree - s:
+                raise ValueError(f"Knot: {knot} cannot be inserted {num} times")
+
+            if geo._rational:
+                newSpan, knotVecNew, ctrlPntsWNew = curveKnotInsertion(
+                    geo.degree, geo.knotVec, geo.ctrlPntsW, knot, num
+                )
+                geo.ctrlPntsW = ctrlPntsWNew
+            else:
+                newSpan, knotVecNew, ctrlPntsNew = curveKnotInsertion(geo.degree, geo.knotVec, geo.ctrlPnts, knot, num)
+                geo.ctrlPnts = ctrlPntsNew
+
+            geo.knotVec = knotVecNew
+
+            return newSpan
 
     elif isinstance(geo, BSplineSurface):
         # u-direction
         if param[0] is not None and num[0] > 0:
-            s = checkInput(param[0], "s", float, 0)
-            r = checkInput(num[0], "r", int, 0)
+            knot = checkInput(param[0], "param[0]", float, 0)
+            num = checkInput(num[0], "num[0]", int, 0)
 
             if s <= 0.0:
                 return
@@ -311,32 +412,6 @@ def splitCurve(curve: BSplineCurve, u: float) -> Tuple[BSplineCurve]:
     ctrlPnts2 = curve.ctrlPnts[breakPnt - 1 :, :].copy()
 
     return BSplineCurve(curve.degree, newKnotVec1, ctrlPnts1), BSplineCurve(curve.degree, newKnotVec2, ctrlPnts2)
-
-
-def getMultiplicity(knot: float, knotVec: np.ndarray, tol: float = 1e-10) -> int:
-    """Finds the multiplicity of a knot in a given knot vector within
-    a tolerance.
-
-    Parameters
-    ----------
-    knot : float
-        The knot.
-    knotVec : np.ndarray
-        The knot vector.
-    tol : float, optional
-        The tolerance below which two knots are considered equal, by default 1e-10
-
-    Returns
-    -------
-    int
-        The knot multiplicity.
-    """
-    nk = 0
-    for k in knotVec:
-        if abs(k - knot) <= tol:
-            nk += 1
-
-    return nk
 
 
 def getSurfaceBasisPt(

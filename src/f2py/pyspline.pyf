@@ -68,6 +68,27 @@ python module libspline ! in
             integer, required,intent(in) :: nctl
             integer intent(out) :: span
         end subroutine findspan
+        subroutine multiplicity(u,knotvec,nctl,degree,mult) ! in :libspline:multiplicity.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            integer, required,intent(in) :: nctl
+            integer, required,intent(in) :: degree
+            integer intent(out) :: mult
+        end subroutine multiplicity
+        subroutine insertknot(u,r,knotvec,degree,ctrlpts,nctl,ndim,knotvecnew,ctrlptsnew,spannew) ! in :libspline:insertKnot.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            integer intent(in, out) :: r
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: ctrlpts
+            integer, optional,intent(in),check(shape(ctrlpts, 1) == nctl),depend(ctrlpts) :: nctl=shape(ctrlpts, 1)
+            integer, optional,intent(in),check(shape(ctrlpts, 0) == ndim),depend(ctrlpts) :: ndim=shape(ctrlpts, 0)
+            real(kind=realtype) dimension(1 + degree + nctl + r),intent(out),depend(degree,nctl,r) :: knotvecnew
+            real(kind=realtype) dimension(ndim,nctl + r),intent(out),depend(nctl,r,ndim) :: ctrlptsnew
+            integer intent(out) :: spannew
+        end subroutine insertknot
     end interface 
 end python module libspline
 

@@ -19,6 +19,8 @@ OBJS =  basis.o\
 	evalCurveNURBS.o\
 	evalSurfaceNURBS.o\
 	evalSurface.o\
+	insertKnot.o\
+	multiplicity.o\
 
 default:
 	$(MAKE) $(MODS)

@@ -34,16 +34,19 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
     control_points = kwargs.get("control_points", True)
     orig = kwargs.get("orig", True)
 
+    # Tecplot keyword args
+    solutionTime = kwargs.get("solutionTime", None)
+
     if isinstance(geo, BSplineCurve):
         if curve:
             data = computeCurveData(geo)
-            writeTecplot1D(file, "interpolated", data)
+            writeTecplot1D(file, "interpolated", data, solutionTime=solutionTime)
         if control_points:
-            writeTecplot1D(file, "control_points", geo.ctrlPnts)
+            writeTecplot1D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
             if geo._rational:
-                writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :3])
+                writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :3], solutionTime=solutionTime)
         if orig and geo.X is not None:
-            writeTecplot1D(file, "orig_data", geo.X)
+            writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)
     elif isinstance(geo, BSplineSurface):
         if surf:
             data = computeSurfaceData(geo)

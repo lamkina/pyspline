@@ -30,7 +30,7 @@ def combineCtrlPnts(ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None) 
         weights = np.ones((wShape))
 
     # Initialize the weighted control points array
-    ctrlPntsW = np.append(ctrlPnts, weights, -1)
+    ctrlPntsW = np.append(ctrlPnts * weights, weights, -1)
 
     return ctrlPntsW
 
@@ -59,14 +59,12 @@ def separateCtrlPnts(ctrlPntsW: np.ndarray) -> Tuple[np.ndarray]:
 
 
 class NURBSCurve(BSplineCurve):
-    def __init__(
-        self, degree: int, knotVec: np.ndarray, ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None
-    ) -> None:
+    def __init__(self, degree: int, knotVec: np.ndarray, ctrlPntsW: np.ndarray) -> None:
         # Initialize the NURBS specific attributes
-        self.ctrlPntsW = combineCtrlPnts(ctrlPnts, weights)
+        self.ctrlPntsW = ctrlPntsW
 
         # Initialize the baseclass BSpline object
-        super(NURBSCurve, self).__init__(degree, knotVec, ctrlPnts)
+        super(NURBSCurve, self).__init__(degree, knotVec, self.ctrlPnts)
         self._rational = True
 
     @property
