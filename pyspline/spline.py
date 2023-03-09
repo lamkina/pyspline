@@ -32,3 +32,7 @@ class Spline(object):
     @X.setter
     def X(self, X: np.ndarray) -> None:
         self._X = X
+
+    @property
+    def rational(self) -> bool:
+        return self._rational

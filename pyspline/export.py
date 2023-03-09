@@ -43,7 +43,7 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             writeTecplot1D(file, "interpolated", data, solutionTime=solutionTime)
         if control_points:
             writeTecplot1D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
-            if geo._rational:
+            if geo.rational:
                 writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :3], solutionTime=solutionTime)
         if orig and geo.X is not None:
             writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)

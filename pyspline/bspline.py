@@ -1,14 +1,12 @@
 # Standard Python modules
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple
 
 # External modules
 import numpy as np
-from scipy.sparse import linalg
 
 # Local modules
 from . import libspline
 from .spline import Spline
-from .utils import Error, _assembleMatrix, checkInput, closeTecplot, openTecplot, writeTecplot1D
 
 
 class BSplineCurve(Spline):
@@ -23,6 +21,10 @@ class BSplineCurve(Spline):
         self.u = None  # Parametric coordinate vector
 
         super(BSplineCurve, self).__init__()
+
+    @property
+    def pDim(self) -> int:
+        return 1
 
     @property
     def nCtl(self) -> int:
@@ -110,7 +112,7 @@ class BSplineCurve(Spline):
         """
         self.calcGrevillePoints()
         s = [self.gpts[0]]
-        N = 100
+        N = 10
         for i in range(len(self.gpts) - 1):
             for j in range(N):
                 s.append((self.gpts[i + 1] - self.gpts[i]) * (j + 1) / (N + 1) + self.gpts[i])
@@ -135,6 +137,10 @@ class BSplineSurface(Spline):
         self.edgeCurves: List[BSplineCurve] = [None, None, None, None]
 
         super(BSplineSurface, self).__init__()
+
+    @property
+    def pDim(self) -> int:
+        return 2
 
     @property
     def nCtlu(self) -> int:
@@ -349,7 +355,7 @@ class BSplineSurface(Spline):
             Upper corner of the bounding box
         """
         if self.nDim != 3:
-            raise Error("getBounds is only defined for nDim = 3")
+            raise ValueError("getBounds is only defined for nDim = 3")
 
         cx = self.ctrlPnts[:, :, 0].flatten()
         cy = self.ctrlPnts[:, :, 1].flatten()
@@ -364,3 +370,7 @@ class BSplineSurface(Spline):
 class BSplineVolume(Spline):
     def __init__(self):
         super(BSplineVolume, self).__init__()
+
+    @property
+    def pDim(self) -> int:
+        return 3
