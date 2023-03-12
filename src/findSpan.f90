@@ -4,45 +4,44 @@
 !> Inputs:
 !>  u       - Real, The parameter value for which to find the knot span
 !>  degree  - Integer, The degree of the B-spline curve or surface
-!>  nctl    - Integer, The number of control points for the B-spline curve or surface
-!>  knotvec - Real, The knot vector for the B-spline curve or surface, length (nctl + degree + 1)
+!>  nCtl    - Integer, The number of control points for the B-spline curve or surface
+!>  knotVec - Real, The knot vector for the B-spline curve or surface, length (nctl + degree + 1)
 !>
 !> Outputs:
 !>  span    - Integer, The knot span that contains the input parameter value u within the knot vector
-subroutine findSpan(u, degree, knotvec, nctl, span)
+subroutine findSpan(u, degree, knotVec, nCtl, span)
+    ! NOTE: We use 0-based indexing to be consistent with algorithms
+    ! in The NURBS Book.
     use precision
     implicit none
-    integer, intent(in) :: degree, nctl
+
+    ! Inputs
+    integer, intent(in) :: degree, nCtl
     real(kind=realType), intent(in) :: u
-    real(kind=realType), intent(in) :: knotvec(nctl + degree + 1)
+    real(kind=realType), intent(in) :: knotVec(0:nCtl + degree)
+
+    ! Outputs
     integer, intent(out) :: span
 
-    integer :: low, high, mid
+    ! Working
+    integer :: low, high, mid, n
     real(kind=realType) :: tol
 
-    tol=1e-6
+    tol = 1e-6
+    n = nCtl - 1
 
-    if ((abs(knotvec(nctl+1) - u) <= tol)) then
-        span = nctl
+    if ((abs(knotVec(n + 1) - u) <= tol)) then
+        span = n
         return
     end if
 
-    ! Check if u is outside the knot vector range
-    ! if (u < knotvec(degree + 2)) then
-    !     span = degree
-    !     return
-    ! elseif (u >= knotvec(nctl + 1)) then
-    !     span = nctl + 1
-    !     return
-    ! end if
-
     ! Perform a binary search to find the knot interval containing u
-    low = degree + 1
-    high = nctl + 1
+    low = degree
+    high = nCtl
 
     mid = (low + high) / 2
-    do while ((u < knotvec(mid) .or. u >= knotvec(mid + 1)))
-        if (u < knotvec(mid)) then
+    do while ((u < knotVec(mid) .or. u >= knotVec(mid + 1)))
+        if (u < knotVec(mid)) then
             high = mid
         else
             low = mid

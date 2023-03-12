@@ -3,10 +3,11 @@ from typing import Optional, Tuple
 
 # External modules
 import numpy as np
-from scipy.sparse import linalg, csr_matrix
+from scipy.sparse import csr_matrix, linalg
 
 # Local modules
 from . import libspline
+from . import parametrizations as param
 from .bspline import BSplineCurve, BSplineSurface
 from .utils import checkInput
 
@@ -90,7 +91,7 @@ def lmsFitCurve(
     if u is not None:
         u = checkInput(u, "u", float, 1, (nPts,))
     else:
-        u = computeParamCurve(points, paramType=paramType)
+        u = param.paramCurve(points, paramType=paramType)
 
     # Check the interpolation weights input
     if weights is not None:
@@ -248,7 +249,7 @@ def lmsFitCurve(
     return curve
 
 
-def interpolateCurve(
+def interpCurveGlobal(
     points: np.ndarray,
     degree: int,
     deriv: Optional[np.ndarray] = None,
@@ -285,9 +286,8 @@ def interpolateCurve(
     -----
     This function computes a curve that passes through the given control points
     and optionally through their derivatives. The parameterization of the curve
-    is computed using the `computeParamCurve` function, which maps the control points
-    to a set of values in parameteric space. The parameteric values are then used to compute
-    the knot vector for the curve using the `computeKnotVectorInterp` function.
+    is computed, which maps the control points to a set of values in parameteric space.
+    The parameteric values are then used to compute the knot vector for the curve.
 
     The interpolation of the curve is then performed by solving a linear system of
     equations. The coefficient matrix of this system is computed using the
@@ -309,7 +309,7 @@ def interpolateCurve(
         derivPtr = np.array([])
 
     # Get the parameteric coordinates
-    u = computeParamCurve(points, paramType=paramType)
+    u = param.paramCurve(points, paramType=paramType)
 
     # Rename the points input to make the next part a bit clearer
     S = points
@@ -328,7 +328,7 @@ def interpolateCurve(
     nCtl = nPts + nderivPts
 
     # Compute the knot vector
-    knotVec = computeKnotVectorInterp(degree, derivPtr, u)
+    knotVec = computeKV1(u, nPts, degree)
 
     # Sanity check to make sure the degree is ok
     if nPts + nderivPts < degree:
@@ -456,7 +456,7 @@ def lmsFitSurface(
 
     # If not given, we need to calculate the parameterization
     else:
-        u, v, U, V = computeParamSurf(points)
+        u, v, U, V = param.paramSurf(points)
 
     # Now we need to calculate the knot vectors for the surface
     uKnotVec = computeKnotVectorLMS(uDegree, u, nCtlu)
@@ -529,7 +529,7 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
     vDegree = nCtlv if nCtlv < vDegree else vDegree
 
     # Compute the parametrization
-    u, v, U, V = computeParamSurf(points)
+    u, v, U, V = param.paramSurf(points)
 
     # Compute the knot vectors
     uKnotVec = computeKnotVectorInterp(uDegree, np.array([], "d"), u)
@@ -557,164 +557,27 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
     return surface
 
 
-def computeParamCurve(points: np.ndarray, paramType: str = "arc") -> np.ndarray:
-    """Compute the parameterization for a curve.
+def computeKV1(u: np.ndarray, nPts: int, degree: int) -> np.ndarray:
+    knotVec = np.zeros(nPts + degree + 1)
 
-    Parameters
-    ----------
-    points : np.ndarray
-        The input points. The array should have shape (nPts, nDim), where nPts is the number of points
-        and nDim is the dimensionality of each point.
-    paramType : str, optional
-        The type of parameterization, by default "arc"
+    for j in range(1, nPts - degree - 1):
+        knotVec[j + degree] = np.sum(u[j : j + degree - 1]) / degree
 
-    Returns
-    -------
-    np.ndarray
-        The parameteric coordinate array of the curve of shape (nPts,)
+    knotVec[-(degree + 1) :] = 1.0
 
-    Raises
-    ------
-    ValueError
-        If the parameterization type is not supported.
-    """
-    if paramType == "arc":
-        return arcLengthParm(points)
-    else:
-        raise ValueError(f"Argument 'interpType' got an invalid value of {paramType}. Valid values are: ['arc']")
+    return knotVec
 
 
-def computeParamSurf(points: np.ndarray) -> Tuple[np.ndarray]:
-    """Compute the parametric coordinates for a surface in the u and v
-    directions.
+def computeKV2(u: np.ndarray, nPts: int, nCtl: int, degree: int) -> np.ndarray:
+    knotVec = np.zeros(nCtl + degree + 1)
 
-    Parameters
-    ----------
-    points : np.ndarray
-        The array of 3D points to fit the surface to, with shape (nu, nv, 3).
+    d = nPts / (nCtl - degree)
 
-    Returns
-    -------
-    Tuple[np.ndarray]
-        The parameteric coordinates in the u and v directions and the
-        grid of U,V parametric coordinate pairs for the surface.  The
-        tuple is ordered as u, v, U, V
-    """
-    nu, nv, _ = points.shape
+    for j in range(1, nPts - degree):
+        i = int(j * d)
+        alpha = (j * d) - i
+        knotVec[j + degree] = ((1.0 - alpha) * u[i - 1]) + (alpha * u[i])
 
-    u = np.zeros(nu, "d")
-    U = np.zeros((nu, nv), "d")
-    singularSounter = 0
+    knotVec[-(degree + 1) :] = 1.0
 
-    # Loop over each v, and average the 'u' parameter
-    for j in range(nv):
-        temp = np.zeros(nu, "d")
-
-        for i in range(nu - 1):
-            temp[i + 1] = temp[i] + np.linalg.norm(points[i, j] - points[i + 1, j])
-
-        if temp[-1] == 0:  # Singular point
-            singularSounter += 1
-            temp[:] = 0.0
-            U[:, j] = np.linspace(0, 1, nu)
-        else:
-            temp = temp / temp[-1]
-            U[:, j] = temp.copy()
-
-        u += temp  # accumulate the u-parameter calculations for each j
-
-    u = u / (nv - singularSounter)  # divide by the number of 'j's we had
-
-    v = np.zeros(nv, "d")
-    V = np.zeros((nu, nv), "d")
-    singularSounter = 0
-
-    # Loop over each u and average the 'v' parameter
-    for i in range(nu):
-        temp = np.zeros(nv, "d")
-        for j in range(nv - 1):
-            temp[j + 1] = temp[j] + np.linalg.norm(points[i, j] - points[i, j + 1])
-
-        if temp[-1] == 0:  # Singular point
-            singularSounter += 1
-            temp[:] = 0.0
-            V[i, :] = np.linspace(0, 1, nv)
-        else:
-            temp = temp / temp[-1]
-            V[i, :] = temp.copy()
-
-        v += temp  # accumulate the v-parameter calculations for each i
-
-    v = v / (nu - singularSounter)  # divide by the number of 'i's we had
-
-    return u, v, U, V
-
-
-def computeKnotVectorInterp(degree: int, derivPtr: np.ndarray, u: np.ndarray) -> np.ndarray:
-    """Calls the fortran 'knots_interp' subroutine.
-
-    Parameters
-    ----------
-    degree : int
-        The degree of the b-spline curve.
-    derivPtr : np.ndarray
-        The pointer that corresponds to parameteric values that have
-        derivatives defined.  This is mainly used for derivative based
-        interpolation.
-    u : np.ndarray
-        The parameteric coordinates.
-
-    Returns
-    -------
-    np.ndarray
-        The knot vector.
-    """
-    return libspline.knots_interp(u, derivPtr, degree)
-
-
-def computeKnotVectorLMS(degree: int, u: np.ndarray, nCtl: int) -> np.ndarray:
-    """Calls the fortran 'knots_lms' subroutine.
-
-    Parameters
-    ----------
-    degree : int
-        The degree of the b-spline curve.
-    u : np.ndarray
-        The parameteric coordinates.
-    nCtl : int
-        The number of control points.
-
-    Returns
-    -------
-    np.ndarray
-        The knot vector.
-    """
-    return libspline.knots_lms(u, nCtl, degree)
-
-
-def arcLengthParm(points: np.ndarray) -> np.ndarray:
-    """Arc length based curve parameterization.
-
-    Parameters
-    ----------
-    points : np.ndarray
-        The input points. The array should have shape (nPts, nDim), where nPts is the number of points
-        and nDim is the dimensionality of each point.
-
-    Returns
-    -------
-    np.ndarray
-        The parametric coordinates.
-    """
-    numPts = points.shape[0]
-    dimPts = points.shape[1]
-    u = np.zeros(numPts, "d")
-
-    for i in range(numPts - 1):
-        dist = 0
-        for idim in range(dimPts):
-            dist += (points[i + 1, idim] - points[i, idim]) ** 2
-
-        u[i + 1] = u[i] + np.sqrt(dist)
-
-    return u / u[-1]
+    return knotVec

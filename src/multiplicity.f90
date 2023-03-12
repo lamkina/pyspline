@@ -13,7 +13,7 @@ subroutine multiplicity(u, knotvec, nctl, degree, mult)
     ! Working
     real(kind=realType) :: tol
     integer :: i
-    
+
     tol = 1e-8
 
     mult = 0

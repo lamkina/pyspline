@@ -19,26 +19,28 @@
 !> Outputs:
 !>  val       - Real, The output array of evaluated points on the surface, shape (ndim, m, n).
 subroutine evalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu, nctlv, ndim, n, m, val)
+    ! NOTE: We use 0-based indexing to be consistent with algorithms
+    ! in The NURBS Book.
     use precision
     implicit none
 
     ! Input
     integer, intent(in) :: udegree, vdegree, nctlu, nctlv, ndim, n, m
-    real(kind=realType), intent(in) :: u(m, n), v(m, n)
-    real(kind=realType), intent(in) :: uknotvec(nctlu + udegree + 1), vknotvec(nctlv + vdegree + 1)
-    real(kind=realType), intent(in) :: P(ndim, nctlv, nctlu)
+    real(kind=realType), intent(in) :: u(0:m - 1, 0:n - 1), v(0:m - 1, 0:n - 1)
+    real(kind=realType), intent(in) :: uknotvec(0:nctlu + udegree), vknotvec(0:nctlv + vdegree)
+    real(kind=realType), intent(in) :: P(0:ndim - 1, 0:nctlv - 1, 0:nctlu - 1)
 
     ! Output
-    real(kind=realType), intent(out) :: val(ndim, m, n)
+    real(kind=realType), intent(out) :: val(0:ndim - 1, 0:m - 1, 0:n - 1)
 
     ! Working
     integer :: istartu, istartv, ii, jj, i, j
     integer :: ileftu, ileftv
-    real(kind=realType) :: Bu(udegree), Bv(vdegree)
+    real(kind=realType) :: Bu(0:udegree), Bv(0:vdegree)
 
     val(:, :, :) = 0.0
-    do i = 1, n
-        do j = 1, m
+    do i = 0, n - 1
+        do j = 0, m - 1
             ! U
             call findSpan(u(j, i), udegree, uknotvec, nctlu, ileftu)
             call basis(u(j, i), udegree, uknotvec, ileftu, nctlu, Bu)
@@ -49,8 +51,8 @@ subroutine evalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu, nct
             call basis(v(j, i), vdegree, vknotvec, ileftv, nctlv, Bv)
             istartv = ileftv - vdegree
 
-            do ii = 1, udegree
-                do jj = 1, vdegree
+            do ii = 0, udegree
+                do jj = 0, vdegree
                     val(:, j, i) = val(:, j, i) + Bu(ii) * Bv(jj) * P(:, istartv + jj, istartu + ii)
                 end do
             end do
@@ -58,3 +60,58 @@ subroutine evalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu, nct
     end do
 
 end subroutine evalSurface
+
+subroutine derivEvalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu, nctlv, ndim, order, skl)
+    ! NOTE: We use 0-based indexing to be consistent with algorithms
+    ! in The NURBS Book.
+    use precision
+    implicit none
+
+    ! Input
+    integer, intent(in) :: udegree, vdegree, nctlu, nctlv, ndim, order
+    real(kind=realType), intent(in) :: u, v
+    real(kind=realType), intent(in) :: uknotvec(0:nctlu + udegree), vknotvec(0:nctlv + vdegree)
+    real(kind=realType), intent(in) :: P(0:ndim - 1, 0:nctlv - 1, 0:nctlu - 1)
+
+    ! Output
+    real(kind=realType), intent(out) :: skl(0:nDim, 0:order, 0:order)
+
+    ! Working
+    integer :: istartu, istartv, ii, jj, i, j, du, dv, dd, k
+    integer :: ileftu, ileftv
+    real(kind=realType) :: Bdu(0:min(udegree, order), 0:udegree), Bdv(0:min(vdegree, order), 0:vdegree)
+    real(kind=realType) :: temp(0:vdegree, 0:nDim)
+
+    ! Initialize the derivatives to zeros
+    skl(:, :, :) = 0.0
+
+    ! Get the highest available derivative order
+    ! (Can only be as big as the degree in each parameteric direction)
+    du = min(udegree, order)
+    dv = min(vdegree, order)
+
+    ! Evaluate the span and basis function derivatives in the u direction
+    call findSpan(u, udegree, uknotvec, nctlu, ileftu)
+    call derivBasis(u, udegree, uknotvec, ileftu, nctlu, order, Bdu)
+    istartu = ileftu - udegree
+
+    call findSpan(v, vdegree, vknotvec, nctlv, ileftv)
+    call derivBasis(v, vdegree, vknotvec, ileftv, nctlv, order, Bdv)
+    istartv = ileftv - vdegree
+
+    do k = 0, du
+        temp(:, :) = 0.0
+        do i = 0, vdegree
+            do j = 0, udegree
+                temp(i, :) = temp(i, :) + Bdu(k, j) * P(:, istartv + i, istartu + j)
+            end do
+        end do
+
+        dd = min(order - k, dv)
+        do ii = 0, dd
+            do jj = 0, vdegree
+                skl(:, ii, k) = skl(:, ii, k) + Bdv(ii, jj) * temp(jj, :)
+            end do
+        end do
+    end do
+end subroutine derivEvalSurface

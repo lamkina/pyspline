@@ -1,153 +1,539 @@
+# Standard Python modules
+from copy import deepcopy
+from typing import Optional, Tuple
+
 # External modules
+from baseclasses.utils import Error
 import numpy as np
 from scipy import sparse
+from scipy.special import binom
 
 # Local modules
 from . import libspline
 
 
-class Error(Exception):
-    """
-    Format the error message in a box to make it clear this
-    was a explicitly raised exception.
-    """
+def multiplicity(knot: float, knotVec: np.ndarray, nCtl: int, degree: int) -> int:
+    """Wrapper around the fortran implementation of `multiplicity`.
 
-    def __init__(self, message):
-        msg = "\n+" + "-" * 78 + "+" + "\n" + "| pySpline Error: "
-        i = 17
-        for word in message.split():
-            if len(word) + i + 1 > 78:  # Finish line and start new one
-                msg += " " * (78 - i) + "|\n| " + word + " "
-                i = 1 + len(word) + 1
-            else:
-                msg += word + " "
-                i += len(word) + 1
-        msg += " " * (78 - i) + "|\n" + "+" + "-" * 78 + "+" + "\n"
-        print(msg)
-        super(Error, self).__init__()
-
-
-def writeTecplot1D(handle, name, data, solutionTime=None):
-    """A Generic function to write a 1D data zone to a tecplot file.
-    Parameters
-    ----------
-    handle : file handle
-        Open file handle
-    name : str
-        Name of the zone to use
-    data : array of size (N, ndim)
-        1D array of data to write to file
-    SolutionTime : float
-        Solution time to write to the file. This could be a fictitious time to
-        make visualization easier in tecplot.
-    """
-    nx = data.shape[0]
-    ndim = data.shape[1]
-    handle.write('Zone T="%s" I=%d\n' % (name, nx))
-    if solutionTime is not None:
-        handle.write("SOLUTIONTIME=%f\n" % (solutionTime))
-    handle.write("DATAPACKING=POINT\n")
-    for i in range(nx):
-        for idim in range(ndim):
-            handle.write("%f " % (data[i, idim]))
-        handle.write("\n")
-
-
-def writeTecplot2D(handle, name, data, solutionTime=None):
-    """A Generic function to write a 2D data zone to a tecplot file.
-    Parameters
-    ----------
-    handle : file handle
-        Open file handle
-    name : str
-        Name of the zone to use
-    data : 2D np array of size (nx, ny, ndim)
-        2D array of data to write to file
-    SolutionTime : float
-        Solution time to write to the file. This could be a fictitious time to
-        make visualization easier in tecplot.
-    """
-    nx = data.shape[0]
-    ny = data.shape[1]
-    ndim = data.shape[2]
-    handle.write('Zone T="%s" I=%d J=%d\n' % (name, nx, ny))
-    if solutionTime is not None:
-        handle.write("SOLUTIONTIME=%f\n" % (solutionTime))
-    handle.write("DATAPACKING=POINT\n")
-    for j in range(ny):
-        for i in range(nx):
-            for idim in range(ndim):
-                handle.write("%20.16g " % (data[i, j, idim]))
-            handle.write("\n")
-
-
-def writeTecplot3D(handle, name, data, solutionTime=None):
-    """A Generic function to write a 3D data zone to a tecplot file.
-    Parameters
-    ----------
-    handle : file handle
-        Open file handle
-    name : str
-        Name of the zone to use
-    data : 3D np array of size (nx, ny, nz, ndim)
-        3D array of data to write to file
-    SolutionTime : float
-        Solution time to write to the file. This could be a fictitious time to
-        make visualization easier in tecplot.
-    """
-    nx = data.shape[0]
-    ny = data.shape[1]
-    nz = data.shape[2]
-    ndim = data.shape[3]
-    handle.write('Zone T="%s" I=%d J=%d K=%d\n' % (name, nx, ny, nz))
-    if solutionTime is not None:
-        handle.write("SOLUTIONTIME=%f\n" % (solutionTime))
-    handle.write("DATAPACKING=POINT\n")
-    for k in range(nz):
-        for j in range(ny):
-            for i in range(nx):
-                for idim in range(ndim):
-                    handle.write("%f " % (data[i, j, k, idim]))
-                handle.write("\n")
-
-
-def _writeHeader(f, ndim):
-    """Write tecplot zone header depending on spatial dimension"""
-    if ndim == 1:
-        f.write('VARIABLES = "CoordinateX"\n')
-    elif ndim == 2:
-        f.write('VARIABLES = "CoordinateX", "CoordinateY"\n')
-    else:
-        f.write('VARIABLES = "CoordinateX", "CoordinateY", "CoordinateZ"\n')
-
-
-def openTecplot(fileName, ndim):
-    """A Generic function to open a Tecplot file to write spatial data.
+    Finds the multiplicty of the knot in the given knot vector.
 
     Parameters
     ----------
-    fileName : str
-        Tecplot filename. Should have a .dat extension.
-    ndim : int
-        Number of spatial dimensions. Must be 1, 2 or 3.
+    knot : float
+        The knot.
+    knotVec : np.ndarray
+        The knot vector.
+    nCtl : int
+        The number of control points.
+    degree : int
+        The degree of the curve.
 
     Returns
     -------
-    f : file handle
-        Open file handle
+    int
+        The multiplicity of the knot.
     """
-    f = open(fileName, "w")
-    _writeHeader(f, ndim)
-
-    return f
+    return libspline.multiplicity(knot, knotVec, nCtl, degree)
 
 
-def closeTecplot(f):
-    """Close Tecplot file opened with openTecplot()"""
-    f.close()
+def findSpan(knot: float, degree: int, knotVec: np.ndarray, nCtl: int) -> int:
+    """Wrapper around the fortran implementation of `findspan` that converts
+    back to 0-based indexing for the python layer.
+
+    Parameters
+    ----------
+    knot : float
+        The knot.
+    degree : int
+        The degree of the curve.
+    knotVec : np.ndarray
+        The knot vector.
+    nCtl : int
+        The number of control points.
+
+    Returns
+    -------
+    int
+        The knot span in 0-based indexing.
+    """
+    return libspline.findspan(knot, degree, knotVec, nCtl) - 1  # Convert to 0-based indexing
 
 
-def _assembleMatrix(data, indices, indptr, shape):
+def insertKnotKV(knotVec: np.ndarray, knot: float, num: int, span: int) -> np.ndarray:
+    """Inserts a knot 'num' times into the knot vector.
+
+    From Algorithm A5.1 of The NURBS Book by Piegl & Tiller.
+
+    Parameters
+    ----------
+    knotVec : np.ndarray
+        The knot vector.
+    knot : float
+        The knot to be inserted.
+    num : int
+        The number of times to insert the knot.
+    span : int
+        The knot span.
+
+    Returns
+    -------
+    np.ndarray
+        The updated knot vector.
+    """
+    size = len(knotVec)
+    newKnotVec = np.zeros(size + num)
+
+    newKnotVec[: span + 1] = knotVec[: span + 1]
+    newKnotVec[span + 1 : span + num + 1] = knot
+    newKnotVec[span + 1 + num : size + num] = knotVec[span + 1 : size]
+
+    return newKnotVec
+
+
+def insertKnotCP(
+    degree: int, knotVec: np.ndarray, ctrlPts: np.ndarray, knot: float, num: int, s: int, span: int
+) -> np.ndarray:
+    """Compute the control points of a b-spline curve after knot insertion.
+
+    Adapted python implementation from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
+    by Bingol and Krishnamurthy
+
+    Parameters
+    ----------
+    degree : int
+        The degree of the curve.
+    knotVec : np.ndarray
+        The knot vector.
+    ctrlPts : np.ndarray
+        The control points.
+    knot : float
+        The knot to be inserted.
+    num : int
+        The number of times to insert the knot.
+    s : int
+        The multiplicity of the knot
+    span : int
+        The knot span.
+
+    Returns
+    -------
+    np.ndarray
+        The updated control points after knot insertion.
+    """
+    # Initialize useful vars
+    nDim = ctrlPts.shape[-1]
+    nctl = len(ctrlPts)
+    nq = nctl + num
+
+    # Allocate new control points
+    ctrlPtsNew = np.zeros((nq, nDim))
+
+    # Allocate a temporary array
+    temp = np.zeros((degree + 1, nDim))
+
+    # Copy over the unaltered control points
+    ctrlPtsNew[: span - degree + 1, :] = ctrlPts[: span - degree + 1, :]
+    ctrlPtsNew[span - s + num : nctl + num, :] = ctrlPts[span - s : nctl, :]
+
+    temp[0 : degree - s + 1, :] = ctrlPts[0 + span - degree : span - s + 1, :]
+
+    # Insert the knot "num" times
+    for j in range(1, num + 1):
+        L = span - degree + j
+        for i in range(0, degree - j - s + 1):
+            alpha = (knot - knotVec[L + i]) / (knotVec[i + span + 1] - knotVec[L + i])
+            temp[i, :] = alpha * temp[i + 1, :] + (1.0 - alpha) * temp[i, :]
+
+        ctrlPtsNew[L] = temp[0, :]
+        ctrlPtsNew[span + num - j - s, :] = temp[degree - j - s, :]
+
+    # Load the remaining control points
+    L = span - degree + num
+    for i in range(L + 1, span - s):
+        ctrlPtsNew[i, :] = temp[i - L, :]
+
+    return ctrlPtsNew
+
+
+def refineKnotCurve(
+    degree: int,
+    knotVec: np.ndarray,
+    ctrlPnts: np.ndarray,
+    density: int = 1,
+    tol: float = 1e-8,
+    knotRange: Optional[Tuple[int, int]] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    nCtl = len(ctrlPnts)
+    if density < 1:
+        raise ValueError(f"Argument 'density' is ({density}) but must be an integer >= 1")
+
+    if knotRange is not None:
+        knotArry = knotVec[knotRange[0], knotRange[1]]
+    else:
+        knotArry = knotVec[degree:-degree]
+
+    # Remove any duplicated knots and sort the knots in ascending order
+    knotArry = np.sort(np.unique(knotArry))
+
+    # Increase the knot density
+    for _ in range(0, density):
+        midpoints = knotArry[:-1] + np.diff(knotArry) / 2.0
+        knotArry = np.insert(knotArry, np.arange(1, len(knotArry)), midpoints, axis=0)
+
+    # Determine the number of knot insertions
+    X = []
+    for knot in knotArry:
+        s = libspline.multiplicity(knot, knotVec, nCtl, degree)
+        r = degree - s
+        X += [knot for _ in range(r)]
+
+    # Check if we can do knot refinement
+    if not X:
+        raise ValueError("Cannot refine knot vector in this parametric dimension")
+
+    # Initialize variables
+    r = len(X) - 1
+    n = nCtl - 1
+    m = n + degree + 1
+    a = libspline.findspan(X[0], degree, knotVec, nCtl) - 1
+    b = libspline.findspan(X[r], degree, knotVec, nCtl)
+
+    # Allocate new control point array
+    # Check the dimensions fo the control points to figure out the shape of the new control points
+    if len(ctrlPnts.shape) == 2:  # Curve
+        newCtrlPnts = np.zeros((n + r + 2, ctrlPnts.shape[-1]))
+    elif len(ctrlPnts.shape) == 3:  # Surface
+        newCtrlPnts = np.zeros((ctrlPnts.shape[0], n + r + 2, ctrlPnts.shape[-1]))
+
+    # Fill unchanged control points
+    newCtrlPnts[: a - degree + 1] = ctrlPnts[: a - degree + 1]
+    newCtrlPnts[b + r : n + r + 2] = ctrlPnts[b - 1 : n + 1]
+
+    # Allocate new knot vector array
+    newKnotVec = np.zeros(m + r + 2)
+
+    # Fill unchanged knots
+    newKnotVec[: a + 1] = knotVec[: a + 1]
+    newKnotVec[b + degree + r + 1 : m + r + 2] = knotVec[b + degree : m + 1]
+
+    # Initialize vars for knot refinement
+    i = b + degree - 1
+    k = b + degree + r
+    j = r
+
+    while j >= 0:
+        while X[j] <= knotVec[i] and i > a:
+            newCtrlPnts[k - degree - 1] = ctrlPnts[i - degree - 1]
+            newKnotVec[k] = knotVec[i]
+            k -= 1
+            i -= 1
+
+        newCtrlPnts[k - degree - 1] = deepcopy(newCtrlPnts[k - degree])
+
+        for l in range(1, degree + 1):
+            idx = k - degree + l
+            alpha = newKnotVec[k + l] - X[j]
+
+            if abs(alpha) < tol:
+                newCtrlPnts[idx - 1] = deepcopy(newCtrlPnts[idx])
+            else:
+                alpha = alpha / (newKnotVec[k + l] - knotVec[i - degree + l])
+                if ctrlPnts.shape == 2:
+                    newCtrlPnts[idx - 1] = alpha * newCtrlPnts[idx - 1] + (1.0 - alpha) * newCtrlPnts[idx]
+                else:
+                    ii = ctrlPnts.shape[0]
+                    newCtrlPnts[idx - 1, :ii] = (
+                        alpha * newCtrlPnts[idx - 1, :ii] + (1.0 - alpha) * newCtrlPnts[idx, :ii]
+                    )
+
+        newKnotVec[k] = X[j]
+        k = k - 1
+        j -= 1
+
+    return newCtrlPnts, newKnotVec
+
+
+def reduceDegreeCurve(degree: int, ctrlPnts: np.ndarray, check: bool = False) -> np.ndarray:
+    if check:
+        if degree + 1 != len(ctrlPnts):
+            raise ValueError("Degree reduction can only work with Bezier-type geometries")
+        if degree < 2:
+            raise ValueError("Input spline geometry must have degree > 1")
+
+    # Allocate the reduced control points
+    newCtrlPnts = np.zeros((degree, ctrlPnts.shape[-1]))
+
+    # Fix the start and end control points
+    newCtrlPnts[0] = ctrlPnts[0]
+    newCtrlPnts[-1] = ctrlPnts[-1]
+
+    # Determine the if the degree is odd or ever
+    degOdd = True if degree % 2 != 0 else False
+
+    # Compute the control points of the reduced degree shape
+    r = int((degree - 1) / 2)
+
+    # Special case when degree equals 2
+    if degree == 2:
+        r1 = r - 2
+    else:
+        r1 = r - 1 if degOdd else r
+
+    alpha = np.arange(1, r1 + 1) / degree
+    newCtrlPnts[1 : r1 + 1] = (ctrlPnts[1 : r1 + 1] - (alpha * newCtrlPnts[:r1])) / (1 - alpha)
+
+    alpha = np.arange(degree - 2, r1 + 2) / degree
+    newCtrlPnts[degree - 2, r1 + 2] = (
+        ctrlPnts[degree - 1 : r1 + 3] - ((1 - alpha) * newCtrlPnts[degree - 1 : r1 + 3])
+    ) / alpha
+
+    if degOdd:
+        # Compute control points to the left
+        alpha = r / degree
+        left = (ctrlPnts[r] - (alpha * newCtrlPnts[r - 1])) / (1 - alpha)
+
+        # Comptue control points to the right
+        alpha = (r + 1) / degree
+        right = (ctrlPnts[r + 1] - ((1 - alpha) * newCtrlPnts[r + 1])) / alpha
+
+        # Compute the average of the left and right
+        newCtrlPnts[r] = 0.5 * (left + right)
+
+    # Return computed control points after degree reduction
+    return newCtrlPnts
+
+
+def removeKnotCtrlPnts(
+    degree: int,
+    knotVec: np.ndarray,
+    ctrlPnts: np.ndarray,
+    knot: float,
+    num: int = 1,
+    tol: float = 1e-4,
+    s: Optional[int] = None,
+    span: Optional[int] = None,
+) -> np.ndarray:
+    """Compute the control points after knot removal
+
+    Adapted from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
+    by Bingol and Krishnamurthy
+
+    Parameters
+    ----------
+    degree : int
+        The degree of the curve.
+    knotVec : np.ndarray
+        The knot vector.
+    ctrlPnts : np.ndarray
+        The weighted or unweighted control points.
+    knot : float
+        The knot to be removed.
+    num : int, optional
+        The number of times to remove the knot, by default 1
+    tol : float, optional
+        The tolerance that determines if the knto can be removed, by default 1e-4
+    s : Optional[int], optional
+        The multiplicity of the knot.  If not provided this will be
+        re-computed, by default None
+    span : Optional[int], optional
+        The knot span.  If not provided this will be re-computed, by default None
+
+    Returns
+    -------
+    np.ndarray
+        _description_
+    """
+    nCtl = len(ctrlPnts)
+    s = libspline.multiplicity(knot, knotVec, nCtl, degree) if s is None else s
+    span = libspline.findspan(knot, degree, knotVec, nCtl) - 1 if span is None else span
+
+    # Check for edge case where we aren't removing any knots
+    if num < 1:
+        return ctrlPnts
+
+    # Initialize variables
+    first = span - degree
+    last = span - s
+
+    # Dont change the input control point array, just copy it over
+    newCtrlPnts = deepcopy(ctrlPnts)
+
+    # We need to check the control point data structure for the geometry type
+    if len(ctrlPnts.shape) > 2:
+        temp = np.zeros(((2 * degree) + 1, nCtl, ctrlPnts.shape[-1]))
+    else:
+        temp = np.zeros(((2 * degree) + 1, ctrlPnts.shape[-1]))
+
+    # Loop to compute Eqs. 5.28 and 5.29 from The NURBS Book
+    for t in range(0, num):
+        temp[0] = ctrlPnts[first - 1]
+        temp[last - first + 2] = ctrlPnts[last + 1]
+        i = first
+        j = last
+        ii = 1
+        jj = last - first + 1
+        remFlag = False
+
+        # Compute control points for one removal step
+        while j - i >= 1:
+            alphai = (knot - knotVec[i]) / (knotVec[i + degree + 1 + t] - knotVec[i])
+            alphaj = (knot - knotVec[j]) / (knotVec[j + degree + 1 + t] - knotVec[j])
+
+            if len(ctrlPnts.shape) > 2:
+                temp[ii, :nCtl] = (ctrlPnts[i, :nCtl] - (1.0 - alphai) * temp[ii - 1, :nCtl]) / alphai
+                temp[jj, :nCtl] = (ctrlPnts[j, :nCtl] - alphaj * temp[jj + 1, :nCtl]) / (1.0 - alphaj)
+            else:
+                temp[ii] = (ctrlPnts[i] - (1.0 - alphai) * temp[ii - 1]) / alphai
+                temp[jj] = (ctrlPnts[j] - alphaj * temp[jj + 1]) / (1.0 - alphaj)
+
+            i += 1
+            j -= 1
+            ii += 1
+            jj -= 1
+
+        # Now we need to check if the knot can be removed
+        if j - i < t:
+            if len(ctrlPnts.shape) > 2:
+                if np.linalg.norm(temp[jj + 1, 0] - temp[ii - 1, 0]) <= tol:
+                    remFlag = True
+            else:
+                if np.linalg.norm(temp[jj + 1] - temp[ii - 1]) <= tol:
+                    remFlag = True
+
+        else:
+            alphai = (knot - knotVec[i]) / (knotVec[i + degree + 1 + t] - knotVec[i])
+            if len(ctrlPnts.shape) > 2:
+                ptn = (alphai * temp[ii + t + 1, 0]) + ((1.0 - alphai) * temp[ii - 1, 0])
+            else:
+                ptn = (alphai * temp[ii + t + 1]) + ((1.0 - alphai) * temp[ii - 1])
+
+            if np.linalg.norm(ptn - ctrlPnts[i]) < tol:
+                remFlag = True
+
+        # Check if we can remove the knot and update the control point array
+        if remFlag:
+            i = first
+            j = last
+            while j - 1 > t:
+                newCtrlPnts[i] = temp[i - first + 1]
+                newCtrlPnts[j] = temp[j - first + 1]
+                i += 1
+                j -= 1
+
+        # Update indices
+        first -= 1
+        last += 1
+
+        # Fix indexing
+        t += 1
+
+        # Shift control points (p.183 of The NURBS Book)
+        j = int((2 * span - s - degree) / 2)
+        i = j
+        for k in range(1, t):
+            if k % 2 == 1:
+                i += 1
+            else:
+                j -= 1
+
+        for k in range(i + 1, nCtl):
+            newCtrlPnts[j] = ctrlPnts[k]
+            j += 1
+
+        # Slice to get the new control points
+        newCtrlPnts = newCtrlPnts[0:-t]
+
+        return newCtrlPnts
+
+
+def removeKnotKV(knotVec: np.ndarray, span: int, num: int) -> np.ndarray:
+    """Computes the knot vector after knot removal.
+
+    Adapted from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
+    by Bingol and Krishnamurthy
+
+    Orginally from part of Algorithm A5.8 of The NURBS book by Piegl & Tiller
+
+    Parameters
+    ----------
+    knotVec : np.ndarray
+        The knot vector.
+    span : int
+        The knot span.
+    num : int
+        The number of knot removals.
+
+    Returns
+    -------
+    np.ndarray
+        The updated knot vector
+    """
+    if num < 1:
+        return knotVec
+
+    newKnotVec = deepcopy(knotVec)
+
+    for iKnot in range(span + 1, len(knotVec)):
+        newKnotVec[iKnot - num] = knotVec[iKnot]
+
+    newKnotVec = newKnotVec[0:-num]
+
+    return newKnotVec
+
+
+def elevateDegreeCurve(degree: int, ctrlPnts: np.ndarray, num: int = 1, check: bool = True):
+    """Computes the control points of the rational/non-rational spline after degree elevation.
+
+    Adapted python implementation from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
+    by Bingol and Krishnamurthy
+
+    The original source is Eq. 5.36 of the NURBS Book by Piegl &B Tiller, p.205
+
+    Parameters
+    ----------
+    degree : int
+        The degree of the spline geometry
+    ctrlPnts : np.ndarray
+        The control points of the spline geometry
+    num : int, optional
+        The number of times to elevate the degree, by default 1
+    check : bool, optional
+        If True, checks the validity of the degree elevation.  Skips the
+        check if False, by default True
+
+    Returns
+    -------
+    np.ndarray
+        The control points of the elevated Bezier geometry
+
+    Raises
+    ------
+    ValueError
+        If the underlying geometry is not a Bezier type
+    ValueError
+        If the number of degree elevations is infeasible
+    """
+    if check:
+        if degree + 1 != len(ctrlPnts):
+            raise ValueError("Can only use degree elevation with Bezier geometries.")
+        if num <= 0:
+            raise ValueError(f"Cannot elevate the degree {num} times.")
+
+    numElevPnts = degree + 1 + num
+    elevPnts = np.zeros((numElevPnts, len(ctrlPnts[0])))
+
+    for i in range(0, numElevPnts):
+        start = max(0, (i - num))
+        end = min(degree, i)
+        for j in range(start, end + 1):
+            coeff = binom(degree, j) * binom(num, (i - j))
+            coeff /= binom((degree + num), i)
+            elevPnts[i] = elevPnts[i] + (coeff * ctrlPnts[j])
+
+    return elevPnts
+
+
+def assembleMatrix(data, indices, indptr, shape):
     """
     Generic assemble matrix function to create a CSR matrix
 
