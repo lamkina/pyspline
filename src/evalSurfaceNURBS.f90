@@ -39,7 +39,7 @@ subroutine evalSurfaceNURBS(u, v, uknotvec, vknotvec, udegree, vdegree, Pw, nctl
             call findSpan(u(j, i), udegree, uknotvec, nctlu, ileftu)
             call basis(uknotvec, nctlu, udegree, u(j, i), ileftu, Bu)
             istartu = ileftu - udegree
-            
+
             ! Get the span and evaluate the basis functions in the v-directions
             call findSpan(v(j, i), vdegree, vknotvec, nctlv, ileftv)
             call basis(vknotvec, nctlv, vdegree, v(j, i), ileftv, Bv)

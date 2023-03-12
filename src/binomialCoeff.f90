@@ -8,7 +8,7 @@
 !   binomial_coefficient: integer, the computed value of C(n,k).
 subroutine bin(n, k, binCoeff)
     implicit none
-    
+
     ! Input
     integer, intent(in) :: n, k
 
@@ -17,18 +17,17 @@ subroutine bin(n, k, binCoeff)
 
     ! Working
     integer :: i, num, denom
-  
+
     num = 1
     denom = 1
-  
+
     ! compute the numerator and denominator
     do i = 1, k
-      num = num * (n - i + 1)
-      denom = denom * i
+        num = num * (n - i + 1)
+        denom = denom * i
     end do
-  
+
     ! compute the final result
     binCoeff = num / denom
-  
-  end subroutine bin
-  
+
+end subroutine bin

@@ -61,8 +61,7 @@ subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, order, ck)
 
     ! Working
     integer :: k, i, binCoeff
-    real(kind=realType) :: v(0:nDim-2), ckw(0:nDim-1, 0:order)
-
+    real(kind=realType) :: v(0:nDim - 2), ckw(0:nDim - 1, 0:order)
 
     ! First we need to evaluate the derivative of the weighted control points using
     ! `derivEvalCurve` for a non-rational B-Spline.
@@ -72,12 +71,12 @@ subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, order, ck)
     ! Next we use Algorithm 4.2 from The NURBS Book to compute the true derivatives `ck`
     ck(:, :) = 0.0
     do k = 0, order
-        v(:) = ckw(0:nDim-2, k)
-        do i = 1, k+1
+        v(:) = ckw(0:nDim - 2, k)
+        do i = 1, k + 1
             call bin(k, i, binCoeff)
-            v(:) = v(:) - (binCoeff * ckw(nDim-1, i) * ck(:, k-i))
+            v(:) = v(:) - (binCoeff * ckw(nDim - 1, i) * ck(:, k - i))
         end do
-        ck(:, k) = v(:) / ckw(nDim-1, 0)
+        ck(:, k) = v(:) / ckw(nDim - 1, 0)
     end do
 
 end subroutine derivEvalCurveNURBS
