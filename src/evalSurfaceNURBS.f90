@@ -12,42 +12,42 @@
 !! @param m Number of points to evaluate in the u-direction
 !! @param n Number of points to evaluate in the v-direction
 !! @param[out] val Array of evaluated points, of size (ndim x m x n)
-subroutine evalSurfaceNURBS(u, v, uknotvec, vknotvec, udegree, vdegree, Pw, nctlu, nctlv, ndim, m, n, val)
+subroutine evalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtlu, nCtlv, nDim, m, n, val)
     ! NOTE: We use 0-based indexing to be consistent with algorithms
     ! in The NURBS Book.
     use precision
     implicit none
 
     ! Input
-    integer, intent(in) :: udegree, vdegree, nctlu, nctlv, ndim, n, m
+    integer, intent(in) :: uDegree, vDegree, nCtlu, nCtlv, nDim, n, m
     real(kind=realType), intent(in) :: u(0:m - 1, 0:n - 1), v(0:m - 1, 0:n - 1)
-    real(kind=realType), intent(in) :: uknotvec(0:nctlu + udegree), vknotvec(0:nctlv + vdegree)
-    real(kind=realType), intent(in) :: Pw(0:ndim - 1, 0:nctlv - 1, 0:nctlu - 1)
+    real(kind=realType), intent(in) :: uKnotVec(0:nCtlu + uDegree), vKnotVec(0:nCtlv + vDegree)
+    real(kind=realType), intent(in) :: Pw(0:nDim - 1, 0:nCtlv - 1, 0:nCtlu - 1)
 
     ! Output
-    real(kind=realType), intent(out) :: val(0:ndim - 1, 0:m - 1, 0:n - 1)
+    real(kind=realType), intent(out) :: val(0:nDim - 1, 0:m - 1, 0:n - 1)
 
     ! Working
     integer :: istartu, istartv, ii, jj, i, j
     integer :: ileftu, ileftv
-    real(kind=realType) :: Bu(0:udegree), Bv(0:vdegree)
+    real(kind=realType) :: Bu(0:uDegree), Bv(0:vDegree)
 
     val(:, :, :) = 0.0
     do i = 0, n - 1
         do j = 0, m - 1
             ! Get the span and evaluate the basis functions in the u-directions
-            call findSpan(u(j, i), udegree, uknotvec, nctlu, ileftu)
-            call basis(uknotvec, nctlu, udegree, u(j, i), ileftu, Bu)
-            istartu = ileftu - udegree
+            call findSpan(u(j, i), uDegree, uKnotVec, nCtlu, ileftu)
+            call basis(uKnotVec, nCtlu, uDegree, u(j, i), ileftu, Bu)
+            istartu = ileftu - uDegree
 
             ! Get the span and evaluate the basis functions in the v-directions
-            call findSpan(v(j, i), vdegree, vknotvec, nctlv, ileftv)
-            call basis(vknotvec, nctlv, vdegree, v(j, i), ileftv, Bv)
-            istartv = ileftv - vdegree
+            call findSpan(v(j, i), vDegree, vKnotVec, nCtlv, ileftv)
+            call basis(vKnotVec, nCtlv, vDegree, v(j, i), ileftv, Bv)
+            istartv = ileftv - vDegree
 
             ! Loop over the basis functions up to the u and v degrees and evaluate each point
-            do ii = 0, udegree
-                do jj = 0, vdegree
+            do ii = 0, uDegree
+                do jj = 0, vDegree
                     val(:, j, i) = val(:, j, i) + Bu(ii) * Bv(jj) * Pw(:, istartv + jj, istartu + ii)
                 end do
             end do
@@ -58,3 +58,50 @@ subroutine evalSurfaceNURBS(u, v, uknotvec, vknotvec, udegree, vdegree, Pw, nctl
     end do
 
 end subroutine evalSurfaceNURBS
+
+subroutine derivEvalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtlu, nCtlv, nDim, order, skl)
+    use precision
+    implicit none
+
+    ! Input
+    integer, intent(in) :: uDegree, vDegree, nCtlu, nCtlv, nDim, order
+    real(kind=realType), intent(in) :: u, v
+    real(kind=realType), intent(in) :: uKnotVec(0:nCtlu+uDegree), vKnotVec(0:nCtlv+vDegree)
+    real(kind=realType), intent(in) :: Pw(0:ndim-1, 0:nCtlv-1, 0:nCtlu-1)
+
+    ! Output
+    real(kind=realType), intent(out) :: skl(0:nDim-2, 0:order, 0:order)
+
+    ! Working
+    real(kind=realType) :: sklw(0:nDim-1, 0:order, 0:order)
+    real(kind=realType) :: temp(0:nDim-2), temp2(0:nDim-2)
+    integer :: k, l, j, i, binCoeff
+
+    ! First we need to call `derivEvalSurface` to evaluate the derivative of the weighted control points.
+    ! This will get A(u) and w(u) and store them in `sklw`
+    call derivEvalSurface(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtlu, nCtlv, ndim, order, sklw)
+
+    ! Use Algorithm A4.4 from The NURBS Book to compute the true derivatives `skl`
+    do k = 0, order
+        do l = 0, order
+            temp = sklw(:, l, k)
+            do j = 1, l+1
+                call bin(l, j, binCoeff)
+                temp = temp - (binCoeff * sklw(nDim-1, j, 0) * skl(:, l-j, k))
+            end do
+            do i = 1, k+1
+                call bin(k, i, binCoeff)
+                temp = temp - (binCoeff * sklw(nDim-1, 0, i) * skl(:, l, k-i))
+                temp2(:) = 0.0
+                do j = 1, l+1
+                    call bin(l, j, binCoeff)
+                    temp2 = temp2 + (binCoeff * sklw(nDim-1, j, i) * skl(:, l-j, k-i))
+                end do
+                call bin(k, i, binCoeff)
+                temp = temp - (binCoeff * temp2)
+            end do
+            skl(:, l, k) = temp(0:ndim-2) / skl(nDim-1, 0, 0)
+        end do
+    end do
+    
+end subroutine derivEvalSurfaceNURBS

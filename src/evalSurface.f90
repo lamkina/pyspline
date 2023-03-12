@@ -74,7 +74,7 @@ subroutine derivEvalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu
     real(kind=realType), intent(in) :: P(0:ndim - 1, 0:nctlv - 1, 0:nctlu - 1)
 
     ! Output
-    real(kind=realType), intent(out) :: skl(0:nDim, 0:order, 0:order)
+    real(kind=realType), intent(out) :: skl(0:nDim-1, 0:order, 0:order)
 
     ! Working
     integer :: istartu, istartv, ii, jj, i, j, du, dv, dd, k
@@ -90,13 +90,14 @@ subroutine derivEvalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu
     du = min(udegree, order)
     dv = min(vdegree, order)
 
-    ! Evaluate the span and basis function derivatives in the u direction
+    ! Evaluate the span and basis function derivatives in the u-direction
     call findSpan(u, udegree, uknotvec, nctlu, ileftu)
-    call derivBasis(u, udegree, uknotvec, ileftu, nctlu, order, Bdu)
+    call derivBasis(u, udegree, uknotvec, ileftu, nctlu, du, Bdu)
     istartu = ileftu - udegree
 
+    ! Evaluate the spand and basis derivatives in the v-direction
     call findSpan(v, vdegree, vknotvec, nctlv, ileftv)
-    call derivBasis(v, vdegree, vknotvec, ileftv, nctlv, order, Bdv)
+    call derivBasis(v, vdegree, vknotvec, ileftv, nctlv, dv, Bdv)
     istartv = ileftv - vdegree
 
     do k = 0, du
@@ -114,4 +115,5 @@ subroutine derivEvalSurface(u, v, uknotvec, vknotvec, udegree, vdegree, P, nctlu
             end do
         end do
     end do
+
 end subroutine derivEvalSurface
