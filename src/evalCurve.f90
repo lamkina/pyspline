@@ -13,28 +13,28 @@
 !>
 !> Outputs:
 !>  val:     - Real, The output array of evaluated points on the curve
-subroutine evalCurve(u, knotvec, degree, P, nctl, ndim, npts, val)
+subroutine evalCurve(u, knotVec, degree, P, nCtl, nDim, nPts, val)
     ! NOTE: We use 0-based indexing to be consistent with algorithms
     ! in The NURBS Book.
     use precision
     implicit none
     ! Input
-    integer, intent(in) :: degree, nctl, ndim, npts
-    real(kind=realType), intent(in) :: u(0:npts - 1)
-    real(kind=realType), intent(in) :: knotvec(0:nctl + degree)
-    real(kind=realType), intent(in) :: P(0:ndim - 1, 0:nctl - 1)
+    integer, intent(in) :: degree, nCtl, nDim, nPts
+    real(kind=realType), intent(in) :: u(0:nPts - 1)
+    real(kind=realType), intent(in) :: knotVec(0:nCtl + degree)
+    real(kind=realType), intent(in) :: P(0:nDim - 1, 0:nCtl - 1)
 
     ! Output
-    real(kind=realType), intent(out) :: val(0:ndim - 1, 0:npts - 1)
+    real(kind=realType), intent(out) :: val(0:nDim - 1, 0:nPts - 1)
 
     ! Working
     integer :: i, j, istart, ileft
     real(kind=realType) :: B(0:degree)
 
     val(:, :) = 0.0
-    do i = 0, npts - 1
-        call findSpan(u(i), degree, knotvec, nctl, ileft)
-        call basis(u(i), degree, knotvec, ileft, nctl, B)
+    do i = 0, nPts - 1
+        call findSpan(u(i), degree, knotVec, nCtl, ileft)
+        call basis(u(i), degree, knotVec, ileft, nCtl, B)
         istart = ileft - degree
         do j = 0, degree
             val(:, i) = val(:, i) + B(j) * P(:, istart + j)
@@ -42,19 +42,19 @@ subroutine evalCurve(u, knotvec, degree, P, nctl, ndim, npts, val)
     end do
 end subroutine evalCurve
 
-subroutine derivEvalCurve(u, knotVec, degree, P, nCtl, nDim, order, ck)
+subroutine derivEvalCurve(u, knotVec, degree, P, order, nCtl, nDim, ck)
     ! NOTE: We use 0-based indexing to be consistent with algorithms
     ! in The NURBS Book.
     use precision
     implicit none
     ! Input
-    integer, intent(in) :: degree, nctl, ndim, order
+    integer, intent(in) :: degree, nCtl, nDim, order
     real(kind=realType), intent(in) :: u
-    real(kind=realType), intent(in) :: knotvec(0:nctl + degree)
-    real(kind=realType), intent(in) :: P(0:ndim - 1, 0:nctl - 1)
+    real(kind=realType), intent(in) :: knotVec(0:nCtl + degree)
+    real(kind=realType), intent(in) :: P(0:nDim - 1, 0:nCtl - 1)
 
     ! Output
-    real(kind=realType), intent(out) :: ck(0:ndim - 1, 0:order)
+    real(kind=realType), intent(out) :: ck(0:nDim - 1, 0:order)
 
     ! Working
     integer :: du, k, j, span

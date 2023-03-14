@@ -12,6 +12,27 @@ from scipy.special import binom
 from . import libspline
 
 
+def calculateGrevillePoints(degree: int, nCtl: int, knotVec: np.ndarray) -> np.ndarray:
+    gpts = np.zeros(nCtl)
+
+    for i in range(nCtl):
+        for n in range(degree):
+            gpts[i] += knotVec[i + n + 1]
+        gpts[i] = gpts[i] / (degree)
+
+    return gpts
+
+
+def calculateInterpolatedGrevillePoints(numPts: int, gPts: np.ndarray) -> np.ndarray:
+    s = [gPts[0]]
+    for i in range(len(gPts) - 1):
+        for j in range(numPts):
+            s.append((gPts[i + 1] - gPts[i]) * (j + 1) / (numPts + 1) + gPts[i])
+        s.append(gPts[i + 1])
+
+    return np.array(s)
+
+
 def multiplicity(knot: float, knotVec: np.ndarray, nCtl: int, degree: int) -> int:
     """Wrapper around the fortran implementation of `multiplicity`.
 
@@ -37,8 +58,9 @@ def multiplicity(knot: float, knotVec: np.ndarray, nCtl: int, degree: int) -> in
 
 
 def findSpan(knot: float, degree: int, knotVec: np.ndarray, nCtl: int) -> int:
-    """Wrapper around the fortran implementation of `findspan` that converts
-    back to 0-based indexing for the python layer.
+    """Wrapper around the fortran implementation of `findspan`.
+
+    Finds the span of the knot in the knot vector.
 
     Parameters
     ----------
@@ -56,7 +78,7 @@ def findSpan(knot: float, degree: int, knotVec: np.ndarray, nCtl: int) -> int:
     int
         The knot span in 0-based indexing.
     """
-    return libspline.findspan(knot, degree, knotVec, nCtl) - 1  # Convert to 0-based indexing
+    return libspline.findspan(knot, degree, knotVec, nCtl)
 
 
 def insertKnotKV(knotVec: np.ndarray, knot: float, num: int, span: int) -> np.ndarray:
@@ -279,13 +301,17 @@ def reduceDegreeCurve(degree: int, ctrlPnts: np.ndarray, check: bool = False) ->
     else:
         r1 = r - 1 if degOdd else r
 
-    alpha = np.arange(1, r1 + 1) / degree
-    newCtrlPnts[1 : r1 + 1] = (ctrlPnts[1 : r1 + 1] - (alpha * newCtrlPnts[:r1])) / (1 - alpha)
+    istart, iend = 1, r1 + 1
+    if istart != iend:
+        alpha = np.arange(istart, iend) / degree
+        newCtrlPnts[istart:iend] = (ctrlPnts[istart:iend] - (alpha * newCtrlPnts[istart - 1 : iend - 1])) / (1 - alpha)
 
-    alpha = np.arange(degree - 2, r1 + 2) / degree
-    newCtrlPnts[degree - 2, r1 + 2] = (
-        ctrlPnts[degree - 1 : r1 + 3] - ((1 - alpha) * newCtrlPnts[degree - 1 : r1 + 3])
-    ) / alpha
+    istart, iend = degree - 2, r1 + 2
+    if istart + 1 != iend + 1:
+        alpha = np.arange(istart + 1, iend + 1) / degree
+        newCtrlPnts[istart:iend] = (
+            ctrlPnts[istart + 1, iend + 1] - ((1 - alpha) * newCtrlPnts[istart + 1, iend + 1])
+        ) / alpha
 
     if degOdd:
         # Compute control points to the left
@@ -345,7 +371,7 @@ def removeKnotCtrlPnts(
     """
     nCtl = len(ctrlPnts)
     s = libspline.multiplicity(knot, knotVec, nCtl, degree) if s is None else s
-    span = libspline.findspan(knot, degree, knotVec, nCtl) - 1 if span is None else span
+    span = libspline.findspan(knot, degree, knotVec, nCtl) if span is None else span
 
     # Check for edge case where we aren't removing any knots
     if num < 1:
@@ -366,18 +392,19 @@ def removeKnotCtrlPnts(
 
     # Loop to compute Eqs. 5.28 and 5.29 from The NURBS Book
     for t in range(0, num):
-        temp[0] = ctrlPnts[first - 1]
-        temp[last - first + 2] = ctrlPnts[last + 1]
+        off = first - 1
+        temp[0] = ctrlPnts[off]
+        temp[last + 1 - off] = ctrlPnts[last + 1]
         i = first
         j = last
         ii = 1
-        jj = last - first + 1
+        jj = last - off
         remFlag = False
 
         # Compute control points for one removal step
-        while j - i >= 1:
+        while j - i >= t:
             alphai = (knot - knotVec[i]) / (knotVec[i + degree + 1 + t] - knotVec[i])
-            alphaj = (knot - knotVec[j]) / (knotVec[j + degree + 1 + t] - knotVec[j])
+            alphaj = (knot - knotVec[j - t]) / (knotVec[j + degree + 1] - knotVec[j - t])
 
             if len(ctrlPnts.shape) > 2:
                 temp[ii, :nCtl] = (ctrlPnts[i, :nCtl] - (1.0 - alphai) * temp[ii - 1, :nCtl]) / alphai
@@ -407,16 +434,16 @@ def removeKnotCtrlPnts(
             else:
                 ptn = (alphai * temp[ii + t + 1]) + ((1.0 - alphai) * temp[ii - 1])
 
-            if np.linalg.norm(ptn - ctrlPnts[i]) < tol:
+            if np.linalg.norm(ptn - ctrlPnts[i]) <= tol:
                 remFlag = True
 
         # Check if we can remove the knot and update the control point array
         if remFlag:
             i = first
             j = last
-            while j - 1 > t:
-                newCtrlPnts[i] = temp[i - first + 1]
-                newCtrlPnts[j] = temp[j - first + 1]
+            while j - i > t:
+                newCtrlPnts[i] = temp[i - off]
+                newCtrlPnts[j] = temp[j - off]
                 i += 1
                 j -= 1
 
@@ -424,26 +451,26 @@ def removeKnotCtrlPnts(
         first -= 1
         last += 1
 
-        # Fix indexing
-        t += 1
+    # Fix indexing
+    t += 1
 
-        # Shift control points (p.183 of The NURBS Book)
-        j = int((2 * span - s - degree) / 2)
-        i = j
-        for k in range(1, t):
-            if k % 2 == 1:
-                i += 1
-            else:
-                j -= 1
+    # Shift control points (p.183 of The NURBS Book)
+    j = int((2 * span - s - degree) / 2)
+    i = j
+    for k in range(1, t):
+        if k % 2 == 1:
+            i += 1
+        else:
+            j -= 1
 
-        for k in range(i + 1, nCtl):
-            newCtrlPnts[j] = ctrlPnts[k]
-            j += 1
+    for k in range(i + 1, nCtl):
+        newCtrlPnts[j] = ctrlPnts[k]
+        j += 1
 
-        # Slice to get the new control points
-        newCtrlPnts = newCtrlPnts[0:-t]
+    # Slice to get the new control points
+    newCtrlPnts = newCtrlPnts[0:-t]
 
-        return newCtrlPnts
+    return newCtrlPnts
 
 
 def removeKnotKV(knotVec: np.ndarray, span: int, num: int) -> np.ndarray:
@@ -612,140 +639,6 @@ def checkInput(inputVal, inputName, dataType, dataRank, dataShape=None):
         return tmp.squeeze()
     else:
         return tmp
-
-
-def trilinearVolume(*args):
-    """This is a short-cut function to create a trilinear b-spline
-    volume. It can be created with ``x`` **OR** with ``xmin`` and
-    ``xmax``.
-
-    Parameters
-    ----------
-    x : array of size (2, 2, 2, 3)
-        Coordinates of the corners of the box.
-
-    xmin : array of size (3)
-        The extreme lower corner of the box
-    xmax : array of size (3)
-        The extreme upper corner of the box. In this case, by
-        construction, the box will be coordinate axis aligned.
-    """
-    # Local modules
-    from .pyVolume import Volume
-
-    tu = [0, 0, 1, 1]
-    tv = [0, 0, 1, 1]
-    tw = [0, 0, 1, 1]
-    ku = 2
-    kv = 2
-    kw = 2
-
-    if len(args) == 1:
-        return Volume(coef=args[0], tu=tu, tv=tv, tw=tw, ku=ku, kv=kv, kw=kw)
-    elif len(args) == 2:
-        xmin = np.array(args[0]).astype("d")
-        xmax = np.array(args[1]).astype("d")
-
-        xLow = xmin[0]
-        xHigh = xmax[0]
-        yLow = xmin[1]
-        yHigh = xmax[1]
-        zLow = xmin[2]
-        zHigh = xmax[2]
-
-        coef = np.zeros((2, 2, 2, 3))
-        coef[0, 0, 0, :] = [xLow, yLow, zLow]
-        coef[1, 0, 0, :] = [xHigh, yLow, zLow]
-        coef[0, 1, 0, :] = [xLow, yHigh, zLow]
-        coef[1, 1, 0, :] = [xHigh, yHigh, zLow]
-        coef[0, 0, 1, :] = [xLow, yLow, zHigh]
-        coef[1, 0, 1, :] = [xHigh, yLow, zHigh]
-        coef[0, 1, 1, :] = [xLow, yHigh, zHigh]
-        coef[1, 1, 1, :] = [xHigh, yHigh, zHigh]
-
-        return Volume(coef=coef, tu=tu, tv=tv, tw=tw, ku=ku, kv=kv, kw=kw)
-    else:
-        raise Error("An unknown number of arguments was passed to trilinear  Volume")
-
-
-def bilinearSurface(*args):
-    """This is short-cut function to create a bilinear surface.
-
-    Args can contain:
-
-    1.  ``x`` array of size(4, 3).  The four corners of the array
-        arranged in the coordinate direction orientation::
-
-          2          3
-          +----------+
-          |          |
-          |          |
-          |          |
-          +----------+
-          0          1
-
-    2. ``p1``, ``p2``, ``p3``, ``p4``. Individual corner points in CCW Ordering::
-
-          3          2
-          +----------+
-          |          |
-          |          |
-          |          |
-          +----------+
-          0          1
-    """
-    # Local modules
-    from .pySurface import Surface
-
-    if len(args) == 1:
-        # One argument passed in ... assume its X
-        if len(args[0]) != 4:
-            raise Error("A single argument passed to bilinear surface must contain 4 points and be of size (4, 3)")
-        coef = np.zeros((2, 2, 3))
-        coef[0, 0] = args[0][0]
-        coef[1, 0] = args[0][1]
-        coef[0, 1] = args[0][2]
-        coef[1, 1] = args[0][3]
-        return Surface(coef=coef, tu=[0, 0, 1, 1], tv=[0, 0, 1, 1], ku=2, kv=2)
-    else:
-        # Assume 4 arguments
-        coef = np.zeros([2, 2, 3])
-        coef[0, 0] = args[0]
-        coef[1, 0] = args[1]
-        coef[0, 1] = args[3]
-        coef[1, 1] = args[2]
-        return Surface(coef=coef, tu=[0, 0, 1, 1], tv=[0, 0, 1, 1], ku=2, kv=2)
-
-
-def line(*args, **kwargs):
-    """This is a short cut function to create a line as a pySpline Curve object.
-
-    Args can contain: (pick one)
-
-    1. ``X`` array of size(2, ndim). The two end points
-    2. ``x1``, ``x2`` The two end points (each of size ndim)
-    3. ``x```, dir=direction. A point and a displacement vector
-    4. ``x1``, dir=direction, length=length. As 3. but with a specific length
-    """
-    # Local modules
-    from .pyCurve import Curve
-
-    if len(args) == 2:
-        # Its a two-point type
-        return Curve(coef=[args[0], args[1]], k=2, t=[0, 0, 1, 1])
-    elif len(args) == 1:
-        if len(args[0]) == 2:  # its X
-            return Curve(coef=args[0], k=2, t=[0, 0, 1, 1])
-        elif "dir" in kwargs:
-            # We have point and direction
-            if "length" in kwargs:
-                x2 = args[0] + kwargs["dir"] / np.linalg.norm(kwargs["dir"]) * kwargs["length"]
-            else:
-                x2 = args[0] + kwargs["dir"]
-
-            return Curve(coef=[args[0], x2], k=2, t=[0, 0, 1, 1])
-        else:
-            Error("Error: dir must be specified if only 1 argument is given")
 
 
 def plane_line(ia, vc, p0, v1, v2):

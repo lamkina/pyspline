@@ -5,7 +5,7 @@ from typing import List, Tuple
 import numpy as np
 
 # Local modules
-from . import libspline
+from . import libspline, utils
 from .spline import Spline
 
 
@@ -16,8 +16,9 @@ class BSplineCurve(Spline):
         self.knotVec = knotVec
 
         # Attributes we will use in methods
-        self.gpts = None  # Greville points vector
-        self.sdata = None
+        self.gPts = None  # Greville points vector
+        self.uData = None  # Interpolated points vector
+        self.data = None
         self.u = None  # Parametric coordinate vector
 
         super(BSplineCurve, self).__init__()
@@ -44,17 +45,22 @@ class BSplineCurve(Spline):
 
     @property
     def knotVec(self) -> np.ndarray:
-        return self._knotVec
+        kv = self._knotVec
+        return (kv - kv[0]) / (kv[-1] - kv[0])
 
     @knotVec.setter
     def knotVec(self, knotVec: np.ndarray) -> None:
-        if len(knotVec) == (self.nCtl + self.degree + 1):
-            self._knotVec = knotVec
-        else:
+        # Check the dimension and make sure the knots are ascending
+        if not len(knotVec) == (self.nCtl + self.degree + 1):
             raise ValueError(
                 f"Knot vector is not the correct length. "
                 f"Input length was {len(knotVec)} and it should be length {self.nCtl + self._degree + 1}"
             )
+
+        if not np.all(knotVec[:-1] <= knotVec[1:]):
+            raise ValueError(f"Knot vector is not in ascending order.")
+
+        self._knotVec = knotVec
 
     @property
     def ctrlPnts(self) -> np.ndarray:
@@ -92,33 +98,22 @@ class BSplineCurve(Spline):
 
         return vals.squeeze().T
 
+    def getDerivative(self, u: float, order: int) -> np.ndarray:
+        ck = libspline.derivevalcurve(u, self.knotVec, self.degree, self.ctrlPnts.T, order)
+
+        return ck.T
+
     def __call__(self, u: np.ndarray) -> np.ndarray:
         """
         Equivalent to getValue()
         """
         return self.getValue(u)
 
-    def calcGrevillePoints(self) -> None:
-        """Calculate the Greville points"""
-        self.gpts = np.zeros(self.nCtl)
-        for i in range(self.nCtl):
-            for n in range(self.degree - 1):  # degree loop
-                self.gpts[i] += self.knotVec[i + n + 1]
-            self.gpts[i] = self.gpts[i] / (self.degree - 1)
-
-    def calcInterpolatedGrevillePoints(self) -> None:
-        """
-        Compute greville points, but with additional interpolated knots
-        """
-        self.calcGrevillePoints()
-        s = [self.gpts[0]]
-        N = 10
-        for i in range(len(self.gpts) - 1):
-            for j in range(N):
-                s.append((self.gpts[i + 1] - self.gpts[i]) * (j + 1) / (N + 1) + self.gpts[i])
-            s.append(self.gpts[i + 1])
-
-        self.sdata = np.array(s)
+    def computeData(self, recompute: bool = False) -> None:
+        if self.data is None or recompute:
+            self.gPts = utils.calculateGrevillePoints(self.degree, self.nCtl, self.knotVec)
+            self.uData = utils.calculateInterpolatedGrevillePoints(10, self.gPts)
+            self.data = self.getValue(self.uData)
 
 
 class BSplineSurface(Spline):
@@ -134,7 +129,12 @@ class BSplineSurface(Spline):
         self.v = None
         self.U = None
         self.V = None
+        self.uData = None
+        self.vData = None
+        self.data = None
+
         self.edgeCurves: List[BSplineCurve] = [None, None, None, None]
+        self.setEdgeCurves()
 
         super(BSplineSurface, self).__init__()
 
@@ -149,22 +149,6 @@ class BSplineSurface(Spline):
     @property
     def nCtlv(self) -> int:
         return self.ctrlPnts.shape[1]
-
-    @property
-    def umin(self) -> float:
-        return self.uKnotVec[0]
-
-    @property
-    def umax(self) -> float:
-        return self.uKnotVec[-1]
-
-    @property
-    def vmin(self) -> float:
-        return self.vKnotVec[0]
-
-    @property
-    def vmax(self) -> float:
-        return self.vKnotVec[-1]
 
     @property
     def nDim(self) -> int:
@@ -188,31 +172,39 @@ class BSplineSurface(Spline):
 
     @property
     def uKnotVec(self) -> np.ndarray:
-        return self._uKnotVec
+        kv = self._uKnotVec
+        return (kv - kv[0]) / (kv[-1] - kv[0])
 
     @uKnotVec.setter
     def uKnotVec(self, uKnotVec: np.ndarray) -> None:
-        if len(uKnotVec) == (self.nCtlu + self.uDegree):
-            self._uKnotVec = uKnotVec
-        else:
+        if not np.all(uKnotVec[:-1] <= uKnotVec[1:]):
+            raise ValueError(f"Knot vector is not in ascending order.")
+
+        if len(uKnotVec) != (self.nCtlu + self.uDegree + 1):
             raise ValueError(
                 f"Knot vector is not the correct length. "
-                f"Input length was {len(uKnotVec)} and it should be length {self.nCtlu + self._uDegree}"
+                f"Input length was {len(uKnotVec)} and it should be length {self.nCtlu + self._uDegree + 1}"
             )
+
+        self._uKnotVec = uKnotVec
 
     @property
     def vKnotVec(self) -> np.ndarray:
-        return self._vKnotVec
+        kv = self._vKnotVec
+        return (kv - kv[0]) / (kv[-1] - kv[0])
 
     @vKnotVec.setter
     def vKnotVec(self, vKnotVec: np.ndarray) -> None:
-        if len(vKnotVec) == (self.nCtlv + self.vDegree):
-            self._vKnotVec = vKnotVec
-        else:
+        if not np.all(vKnotVec[:-1] <= vKnotVec[1:]):
+            raise ValueError(f"Knot vector is not in ascending order.")
+
+        if len(vKnotVec) != (self.nCtlv + self.vDegree + 1):
             raise ValueError(
                 f"Knot vector is not the correct length. "
-                f"Input length was {len(vKnotVec)} and it should be length {self.nCtlv + self._vDegree}"
+                f"Input length was {len(vKnotVec)} and it should be length {self.nCtlv + self._vDegree + 1}"
             )
+
+        self._vKnotVec = vKnotVec
 
     @property
     def ctrlPnts(self) -> np.ndarray:
@@ -220,7 +212,7 @@ class BSplineSurface(Spline):
 
     @ctrlPnts.setter
     def ctrlPnts(self, ctrlPnts: np.ndarray) -> None:
-        if ctrlPnts.ndim >= 2:
+        if ctrlPnts.ndim == 3:
             self._ctrlPnts = ctrlPnts
         else:
             raise ValueError(
@@ -244,13 +236,13 @@ class BSplineSurface(Spline):
             raise ValueError("Corner must be in range [0,3]")
 
         if corner == 0:
-            return self.getValue(self.umin, self.vmin)
+            return self.getValue(0, 0)
         elif corner == 1:
-            return self.getValue(self.umax, self.vmin)
+            return self.getValue(1, 0)
         elif corner == 2:
-            return self.getValue(self.umin, self.vmax)
+            return self.getValue(0, 1)
         elif corner == 3:
-            return self.getValue(self.umax, self.vmax)
+            return self.getValue(1, 1)
 
     def getValue(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
         """Evaluate the b-spline surface at parametric positions u,v. This is the
@@ -273,12 +265,12 @@ class BSplineSurface(Spline):
         u = u.T
         v = v.T
 
-        if not u.shape == v.shape:
+        if u.shape != v.shape:
             raise ValueError(f"u and v must have the same shape.  u has shape {u.shape} and v has shape {v.shape}.")
 
         u = np.atleast_2d(u)
         v = np.atleast_2d(v)
-        vals = libspline.eval_surface(u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T)
+        vals = libspline.evalsurface(u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T)
         return vals.squeeze().T
 
     def __call__(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -287,7 +279,7 @@ class BSplineSurface(Spline):
         """
         return self.getValue(u, v)
 
-    def getDerivative(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    def getDerivative(self, u: np.ndarray, v: np.ndarray, order) -> np.ndarray:
         """Evaluate the first derivatvies of the spline surface
 
         Parameters
@@ -309,39 +301,10 @@ class BSplineSurface(Spline):
         if not np.ndim(u) == 0:
             raise ValueError("'getDerivative' only accepts scalar arguments.")
 
-        deriv = libspline.eval_surface_deriv(
-            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T
+        deriv = libspline.derivevalsurface(
+            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T, order
         )
-        return deriv.T
 
-    def getSecondDerivative(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
-        """Evaluate the second derivatvies of the spline surface
-
-        deriv = [ (d^2)/(du^2)    (d^2)/(dudv) ]
-                [ (d^2)/(dudv)    (d^2)/(dv^2) ]
-
-        Parameters
-        ----------
-        u : float
-            Parametric u value
-        v : float
-            Parametric v value
-
-        Returns
-        -------
-        deriv : np.ndarray size (2,2,3)
-            Spline derivative evaluation at u,vall points u,v. Shape
-            depend on the input.
-        """
-        if not u.shape == v.shape:
-            raise ValueError(f"u and v must have the same shape.  u has shape {u.shape} and v has shape {v.shape}.")
-
-        if not np.ndim(u) == 0:
-            raise ValueError("'getDerivative' only accepts scalar arguments.")
-
-        deriv = libspline.eval_surface_deriv2(
-            u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPnts.T
-        )
         return deriv.T
 
     def getBounds(self) -> Tuple[np.ndarray]:
@@ -366,9 +329,32 @@ class BSplineSurface(Spline):
 
         return Xmin, Xmax
 
+    def computeData(self, recompute: bool = False) -> None:
+        if self.data is None or recompute:
+            curve0 = self.edgeCurves[0]
+            gPts0 = utils.calculateGrevillePoints(curve0.degree, curve0.nCtl, curve0.knotVec)
+
+            curve2 = self.edgeCurves[2]
+            gPts2 = utils.calculateGrevillePoints(curve2.degree, curve2.nCtl, curve2.knotVec)
+
+            self.uData = utils.calculateInterpolatedGrevillePoints(10, gPts0)
+            self.vData = utils.calculateInterpolatedGrevillePoints(10, gPts2)
+
+            self.V, self.U = np.meshgrid(self.vData, self.uData)
+            self.data = self.getValue(self.U, self.V)
+
 
 class BSplineVolume(Spline):
-    def __init__(self):
+    def __init__(
+        self,
+        uDegree: int,
+        vDegree: int,
+        wDegree: int,
+        ctrlPnts: np.ndarray,
+        uKnotVec: np.ndarray,
+        vKnotVec: np.ndarray,
+        wKnotVec: np.ndarray,
+    ) -> None:
         super(BSplineVolume, self).__init__()
 
     @property

@@ -35,14 +35,14 @@ subroutine evalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtl
     val(:, :, :) = 0.0
     do i = 0, n - 1
         do j = 0, m - 1
-            ! Get the span and evaluate the basis functions in the u-directions
+            ! U
             call findSpan(u(j, i), uDegree, uKnotVec, nCtlu, ileftu)
-            call basis(uKnotVec, nCtlu, uDegree, u(j, i), ileftu, Bu)
+            call basis(u(j, i), uDegree, uKnotVec, ileftu, nCtlu, Bu)
             istartu = ileftu - uDegree
 
-            ! Get the span and evaluate the basis functions in the v-directions
+            ! V
             call findSpan(v(j, i), vDegree, vKnotVec, nCtlv, ileftv)
-            call basis(vKnotVec, nCtlv, vDegree, v(j, i), ileftv, Bv)
+            call basis(v(j, i), vDegree, vKnotVec, ileftv, nCtlv, Bv)
             istartv = ileftv - vDegree
 
             ! Loop over the basis functions up to the u and v degrees and evaluate each point
@@ -67,7 +67,7 @@ subroutine derivEvalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw,
     integer, intent(in) :: uDegree, vDegree, nCtlu, nCtlv, nDim, order
     real(kind=realType), intent(in) :: u, v
     real(kind=realType), intent(in) :: uKnotVec(0:nCtlu+uDegree), vKnotVec(0:nCtlv+vDegree)
-    real(kind=realType), intent(in) :: Pw(0:ndim-1, 0:nCtlv-1, 0:nCtlu-1)
+    real(kind=realType), intent(in) :: Pw(0:nDim-1, 0:nCtlv-1, 0:nCtlu-1)
 
     ! Output
     real(kind=realType), intent(out) :: skl(0:nDim-2, 0:order, 0:order)
@@ -79,7 +79,7 @@ subroutine derivEvalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw,
 
     ! First we need to call `derivEvalSurface` to evaluate the derivative of the weighted control points.
     ! This will get A(u) and w(u) and store them in `sklw`
-    call derivEvalSurface(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtlu, nCtlv, ndim, order, sklw)
+    call derivEvalSurface(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtlu, nCtlv, nDim, order, sklw)
 
     ! Use Algorithm A4.4 from The NURBS Book to compute the true derivatives `skl`
     do k = 0, order
@@ -100,7 +100,7 @@ subroutine derivEvalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw,
                 call bin(k, i, binCoeff)
                 temp = temp - (binCoeff * temp2)
             end do
-            skl(:, l, k) = temp(0:ndim-2) / skl(nDim-1, 0, 0)
+            skl(:, l, k) = temp(0:nDim-2) / skl(nDim-1, 0, 0)
         end do
     end do
     

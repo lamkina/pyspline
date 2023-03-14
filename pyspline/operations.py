@@ -162,7 +162,7 @@ def elevateDegree(geo: GEOTYPE, param: Union[List, np.ndarray, Tuple]) -> None:
 
             nd = geo.degree + param[0]
 
-            num = geo.degree - 1
+            num = geo.degree + 1
 
         # Combine the Bezier curve segments back into a full
         knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
@@ -223,10 +223,10 @@ def reduceDegree(geo: GEOTYPE, param: List[int]) -> None:
             curve.knotVec = curve.knotVec[1:-1]
 
         # Compute new degree
-        nd = curve.degree - 1
+        nd = geo.degree - 1
 
         # Number of knot removals
-        num = curve.degree - 1
+        num = geo.degree - 1
 
         # Combine the Bezier curve segments back into a full
         knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
@@ -328,23 +328,26 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = T
             # First we need to find the multiplicity of the knot, denoted by "s"
             s = utils.multiplicity(knot, geo.knotVec, geo.nCtl, geo.degree)
 
+            # Get the knot span
+            span = utils.findSpan(knot, geo.degree, geo.knotVec, geo.nCtl)
+
+            newKnotVec = utils.insertKnotKV(geo.knotVec, knot, num, span)
+
             # Check if we can add the requested number of knots
             if check:
                 if num > geo.degree - s:
                     raise ValueError(f"Knot: {knot} cannot be inserted {num} times")
 
             if geo.rational:
-                newSpan, knotVecNew, ctrlPntsWNew = utils.insertKnotCP(
-                    geo.degree, geo.knotVec, geo.ctrlPntsW, knot, num, s
-                )
+                ctrlPntsWNew = utils.insertKnotCP(geo.degree, geo.knotVec, geo.ctrlPntsW, knot, num, s, span)
                 geo.ctrlPntsW = ctrlPntsWNew
             else:
-                newSpan, knotVecNew, ctrlPntsNew = utils.insertKnotCP(
-                    geo.degree, geo.knotVec, geo.ctrlPnts, knot, num, s
-                )
+                ctrlPntsNew = utils.insertKnotCP(geo.degree, geo.knotVec, geo.ctrlPnts, knot, num, s, span)
                 geo.ctrlPnts = ctrlPntsNew
 
-            geo.knotVec = knotVecNew
+            geo.knotVec = newKnotVec
+
+            newSpan = utils.findSpan(knot, geo.degree, geo.knotVec, geo.nCtl)
 
             return newSpan
 
@@ -593,6 +596,7 @@ def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
     the range of (0, 1)
     """
     u = checkInput(u, "u", float, 0)
+    curve = deepcopy(curve)  # Make a copy so we don't alter the original curve
 
     if u <= 0.0:
         if curve._rational:
@@ -610,14 +614,14 @@ def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
     nCtl = curve.nCtl
 
     # Get the multiplicity of the knot
-    kOrig = utils.findSpan(u, curve.degree, curve.knotVec, nCtl) + 1 - curve.degree
+    kOrig = utils.findSpan(u, curve.degree, curve.knotVec, nCtl) - curve.degree + 1
     s = utils.multiplicity(u, curve.knotVec, nCtl, curve.degree)
 
     # r = degree - multiplicity
     r = curve.degree - s
 
     insertKnot(curve, [u], [r], check=False)
-    kNew = utils.findSpan(u, curve.degree, curve.knotVec, curve.nCtl)
+    kNew = utils.findSpan(u, curve.degree, curve.knotVec, curve.nCtl) + 1
 
     # Allocate the new knot vectors
     knotVec1 = np.zeros(len(curve.knotVec[:kNew]) + 1)
@@ -688,17 +692,3 @@ def getSurfaceBasisPt(
     return libspline.getbasisptsurface(
         u, v, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, vals, colInd, iStart, lIndex
     )
-
-
-def computeCurveData(curve: BSplineCurve):
-    curve.calcInterpolatedGrevillePoints()
-    return curve(curve.sdata)
-
-
-def computeSurfaceData(surf: BSplineSurface):
-    surf.edgeCurves[0].calcInterpolatedGrevillePoints()
-    udata = surf.edgeCurves[0].sdata
-    surf.edgeCurves[2].calcInterpolatedGrevillePoints()
-    vdata = surf.edgeCurves[2].sdata
-    V, U = np.meshgrid(vdata, udata)
-    return surf(U, V)

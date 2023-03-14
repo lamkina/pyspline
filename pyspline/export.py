@@ -4,7 +4,6 @@ import numpy as np
 # Local modules
 from .bspline import BSplineCurve, BSplineSurface
 from .customTypes import GEOTYPE
-from .operations import computeCurveData, computeSurfaceData
 
 
 def writeTecplot1D(handle, name, data, solutionTime=None):
@@ -156,22 +155,27 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
     # Tecplot keyword args
     solutionTime = kwargs.get("solutionTime", None)
 
+    # Compute the postprocessing data (all geo types share this method)
+    geo.computeData(recompute=True)
+
     if isinstance(geo, BSplineCurve):
         if curve:
-            data = computeCurveData(geo)
-            writeTecplot1D(file, "interpolated", data, solutionTime=solutionTime)
+            writeTecplot1D(file, "interpolated", geo.data, solutionTime=solutionTime)
         if control_points:
             writeTecplot1D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
             if geo.rational:
-                writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :3], solutionTime=solutionTime)
+                writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :-1], solutionTime=solutionTime)
         if orig and geo.X is not None:
             writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)
     elif isinstance(geo, BSplineSurface):
         if surf:
-            data = computeSurfaceData(geo)
-            writeTecplot2D(file, "interpolated", data)
+            writeTecplot2D(file, "interpolated", geo.data, solutionTime=solutionTime)
         if control_points:
-            writeTecplot2D(file, "control_points", geo.ctrlPnts)
+            writeTecplot2D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
+            if geo.rational:
+                writeTecplot2D(file, "weighted_cpts", geo.ctrlPntsW[:, :, :-1], solutionTime=solutionTime)
+        if orig and geo.X is not None:
+            writeTecplot2D(file, "orig_data", geo.X, solutionTime=solutionTime)
         if directions:
             writeSurfaceDirections(surf, file, 0)
     else:

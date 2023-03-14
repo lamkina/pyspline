@@ -16,32 +16,32 @@
 !>
 !> Notes:
 !>  This subroutine assumes that the last coordinate of each control point in the Pw array is its weight.
-subroutine evalCurveNURBS(u, knotvec, degree, Pw, nctl, ndim, npts, val)
+subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val)
     use precision
     implicit none
 
     ! Input
-    integer, intent(in) :: degree, nctl, ndim, npts
-    real(kind=realType), intent(in) :: u(0:npts - 1)
-    real(kind=realType), intent(in) :: knotvec(0:nctl + degree)
-    real(kind=realType), intent(in) :: Pw(0:ndim - 1, 0:nctl - 1)
+    integer, intent(in) :: degree, nCtl, nDim, nPts
+    real(kind=realType), intent(in) :: u(0:nPts - 1)
+    real(kind=realType), intent(in) :: knotVec(0:nCtl + degree)
+    real(kind=realType), intent(in) :: Pw(0:nDim - 1, 0:nCtl - 1)
 
     ! Output
-    real(kind=realType), intent(out) :: val(0:ndim - 1, 0:npts - 1)
+    real(kind=realType), intent(out) :: val(0:nDim - 1, 0:nPts - 1)
 
     ! Working
     integer :: i, j, istart, ileft
     real(kind=realType) :: B(0:degree)
 
     val(:, :) = 0.0
-    do i = 0, npts - 1
-        call findSpan(u(i), degree, knotvec, nctl, ileft)
-        call basis(u(i), degree, knotvec, ileft, nctl, B)
+    do i = 0, nPts - 1
+        call findSpan(u(i), degree, knotVec, nCtl, ileft)
+        call basis(u(i), degree, knotVec, ileft, nCtl, B)
         istart = ileft - degree
         do j = 0, degree
             val(:, i) = val(:, i) + B(j) * Pw(:, istart + j)
         end do
-        val(:, i) = val(:, i) / val(ndim - 1, i)
+        val(:, i) = val(:, i) / val(nDim - 1, i)
     end do
 end subroutine evalCurveNURBS
 
@@ -55,7 +55,7 @@ subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, order, ck)
     ! Input
     integer, intent(in) :: degree, nCtl, nDim, order
     real(kind=realType), intent(in) :: u
-    real(kind=realType), intent(in) :: knotvec(0:nCtl + degree)
+    real(kind=realType), intent(in) :: knotVec(0:nCtl + degree)
     real(kind=realType), intent(in) :: Pw(0:nDim - 1, 0:nCtl - 1)
 
     ! Output

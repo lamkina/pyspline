@@ -1,12 +1,12 @@
 # Standard Python modules
-from typing import Optional, Tuple
+from typing import List
 
 # External modules
 import numpy as np
 
 # Local modules
 from . import libspline
-from .bspline import BSplineCurve, BSplineSurface
+from .bspline import BSplineCurve, BSplineSurface, BSplineVolume
 from .compatibility import combineCtrlPnts, separateCtrlPnts
 
 
@@ -25,6 +25,9 @@ class NURBSCurve(BSplineCurve):
 
     @ctrlPntsW.setter
     def ctrlPntsW(self, val: np.ndarray) -> None:
+        if np.any(val[:, -1] == 0):
+            raise ValueError("Weights cannot have zero entries")
+
         self._ctrlPntsW = val
 
     @property
@@ -43,12 +46,11 @@ class NURBSCurve(BSplineCurve):
 
     @weights.setter
     def weights(self, weights: np.ndarray) -> None:
-        if weights is None:
-            weights = np.ones(self.nCtl)
-        else:
-            if weights.shape != (self.nCtl,):
-                raise ValueError(f"Weights must be of shape (nCtl,). Argument was of shape {weights.shape}")
-            weights = weights
+        if weights.shape != (self.nCtl,):
+            raise ValueError(f"Weights must be of shape (nCtl,). Argument was of shape {weights.shape}")
+
+        if any(weights == 0.0):
+            raise ValueError("Weights cannot have zero entries.")
 
         self.ctrlPntsW = combineCtrlPnts(self.ctrlPnts, weights)
 
@@ -104,22 +106,20 @@ class NURBSSurface(BSplineSurface):
         self._rational = True
 
         # Initialize the baseclass BSpline object
-        ctrlPnts = separateCtrlPnts(ctrlPntsW)
-        super(NURBSSurface, self).__init__(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
+        super(NURBSSurface, self).__init__(uDegree, vDegree, self.ctrlPnts, uKnotVec, vKnotVec)
+
+        self.edgeCurves: List[NURBSCurve] = [None, None, None, None]
+        self.setEdgeCurves()
 
     @property
     def ctrlPntsW(self) -> np.ndarray:
-        return self.ctrlPntsW
+        return self._ctrlPntsW
 
     @ctrlPntsW.setter
     def ctrlPntsW(self, ctrlPntsW: np.ndarray) -> None:
-        if ctrlPntsW.shape != (self.nCtlu, self.nCtlv, self.nDim + 1):
-            raise ValueError(
-                "Control points must be of shape (nCtlu, nCtlv, nDim)="
-                f"({self.nCtlu, self.nCtlv, self.nDim+1})."
-                f"Input was of shape={ctrlPntsW.shape}"
-            )
-        self.ctrlPntsW = ctrlPntsW
+        if np.any(ctrlPntsW[:, :, -1] == 0):
+            raise ValueError("Weights cannot have zero entries")
+        self._ctrlPntsW = ctrlPntsW
 
     @property
     def ctrlPnts(self) -> np.ndarray:
@@ -128,12 +128,12 @@ class NURBSSurface(BSplineSurface):
 
     @ctrlPnts.setter
     def ctrlPnts(self, ctrlPnts: np.ndarray) -> None:
-        if ctrlPnts.shape != (self.nCtlu, self.nCtlv, self.nDim):
+        if ctrlPnts.ndim != 3:
             raise ValueError(
-                "Control points must be of shape (nCtlu, nCtlv, nDim)="
-                f"({self.nCtlu, self.nCtlv, self.nDim})."
-                f"Input was of shape={ctrlPnts.shape}"
+                "Control point vector must be a 2D array of shape (nCtlu, nCtlv, nDim). "
+                f"The input control point vector was shape: {ctrlPnts.shape}"
             )
+
         self.ctrlPntsW = combineCtrlPnts(ctrlPnts, self.weights)
 
     @property
@@ -143,12 +143,11 @@ class NURBSSurface(BSplineSurface):
 
     @weights.setter
     def weights(self, weights: np.ndarray) -> None:
-        if weights.shape != (self.nCtlu, self.nCtlv):
+        if weights.shape != (self.nCtlu * self.nCtlv,):
             raise ValueError(
-                f"Weights must be of shape (nCtlu,nCtlv)=({self.nCtlu, self.nCtlv}). "
+                f"Weights must be of shape (nCtlu * nCtlv,)=({self.nCtlu * self.nCtlv},). "
                 f"Argument was of shape {weights.shape}"
             )
-        weights = weights
 
         self.ctrlPntsW = combineCtrlPnts(self.ctrlPnts, weights)
 
@@ -178,13 +177,41 @@ class NURBSSurface(BSplineSurface):
 
         u = np.atleast_2d(u)
         v = np.atleast_2d(v)
+
         vals = libspline.evalsurfacenurbs(
             u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPntsW.T
         )
-        return vals.squeeze().T
+        return vals.squeeze().T[:, :, :-1]
 
     def __call__(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
         """
         Equivalant to getValue()
         """
         return self.getValue(u, v)
+
+    def setEdgeCurves(self) -> None:
+        """Create curve spline objects for each of the edges"""
+        self.edgeCurves[0] = NURBSCurve(degree=self.uDegree, knotVec=self.uKnotVec, ctrlPntsW=self.ctrlPntsW[:, 0])
+        self.edgeCurves[1] = NURBSCurve(degree=self.uDegree, knotVec=self.uKnotVec, ctrlPntsW=self.ctrlPntsW[:, -1])
+        self.edgeCurves[2] = NURBSCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctrlPntsW=self.ctrlPntsW[0, :])
+        self.edgeCurves[3] = NURBSCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctrlPntsW=self.ctrlPntsW[-1, :])
+
+
+class NURBSVolume(BSplineVolume):
+    def __init__(
+        self,
+        uDegree: int,
+        vDegree: int,
+        wDegree: int,
+        ctrlPntsW: np.ndarray,
+        uKnotVec: np.ndarray,
+        vKnotVec: np.ndarray,
+        wKnotVec: np.ndarray,
+    ) -> None:
+        # Initialize the NURBS specific attributes
+        self.ctrlPntsW = ctrlPntsW
+        self._rational = True
+
+        # Initialize the baseclass BSpline object
+        ctrlPnts = separateCtrlPnts(ctrlPntsW)
+        super(NURBSVolume, self).__init__(uDegree, vDegree, wDegree, ctrlPnts, uKnotVec, vKnotVec, wKnotVec)

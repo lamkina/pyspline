@@ -15,12 +15,11 @@ def combineCtrlPnts(ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None) 
     # Check the input weight array and set the value
     # If weights is None we set them to an array of 1's
     if weights is not None:
-        if weights.shape[0] != wShape[0]:
+        if len(weights) != np.prod(wShape[:-1]):
             raise ValueError(
-                f"The shape of the weight array must be {wShape} "
-                "based on the shape of the control point array. "
-                f"The current shape is {weights.shape}."
+                f"The length of the weight array must be {np.prod(wShape[:-1])}. Current length is {len(weights)}"
             )
+
         weights = weights.reshape(wShape)
     else:
         weights = np.ones((wShape))
@@ -34,13 +33,13 @@ def combineCtrlPnts(ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None) 
 def separateCtrlPnts(ctrlPntsW: np.ndarray) -> Tuple[np.ndarray]:
     # Convert the shape to a list so we can alter it
     newShape = list(ctrlPntsW.shape)
-    newShape[-1] = 3
+    newShape[-1] -= 1
 
     # Flatten out the control points into a 2D array of length nDim + 1
     temp = ctrlPntsW.reshape(-1, ctrlPntsW.shape[-1])
 
     # Get the control points
-    ctrlPnts = temp[:, :3].reshape(newShape)
+    ctrlPnts = temp[:, :-1]
 
     # Get the weights and flatten the column array
     weights = temp[:, -1].flatten()

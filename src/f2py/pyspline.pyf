@@ -3,57 +3,8 @@
 
 python module libspline ! in 
     interface  ! in :libspline
-        subroutine evalcurve(u,knotvec,degree,p,nctl,ndim,npts,val) ! in :libspline:evalCurve.f90
-            real(kind=realtype) dimension(npts),intent(in) :: u
-            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
-            integer, required,intent(in) :: degree
-            real(kind=realtype) dimension(ndim,nctl),intent(in) :: p
-            integer, optional,intent(in),check(shape(p, 1) == nctl),depend(p) :: nctl=shape(p, 1)
-            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
-            integer, optional,intent(in),check(shape(u, 0) == npts),depend(u) :: npts=shape(u, 0)
-            real(kind=realtype) dimension(ndim,npts),intent(out),depend(ndim,npts) :: val
-        end subroutine evalcurve
-        subroutine evalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,npts,val) ! in :libspline:evalCurveNURBS.f90
-            real(kind=realtype) dimension(npts),intent(in) :: u
-            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
-            integer, required,intent(in) :: degree
-            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
-            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
-            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
-            integer, optional,intent(in),check(shape(u, 0) == npts),depend(u) :: npts=shape(u, 0)
-            real(kind=realtype) dimension(ndim,npts),intent(out),depend(ndim,npts) :: val
-        end subroutine evalcurvenurbs
-        subroutine evalsurface(u,v,uknotvec,vknotvec,udegree,vdegree,p,nctlu,nctlv,ndim,n,m,val) ! in :libspline:evalSurface.f90
-            real(kind=realtype) dimension(m,n),intent(in) :: u
-            real(kind=realtype) dimension(m,n),intent(in),depend(m,n) :: v
-            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
-            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(vdegree,nctlv) :: vknotvec
-            integer, required,intent(in) :: udegree
-            integer, required,intent(in) :: vdegree
-            real(kind=realtype) dimension(ndim,nctlv,nctlu),intent(in) :: p
-            integer, required,intent(in),check(shape(p, 2) == nctlu),depend(p) :: nctlu=shape(p, 2)
-            integer, required,intent(in),check(shape(p, 1) == nctlv),depend(p) :: nctlv=shape(p, 1)
-            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
-            integer, optional,intent(in),check(shape(u, 1) == n),depend(u) :: n=shape(u, 1)
-            integer, optional,intent(in),check(shape(u, 0) == m),depend(u) :: m=shape(u, 0)
-            real(kind=realtype) dimension(ndim,m,n),intent(out),depend(ndim,n,m) :: val
-        end subroutine evalsurface
-        subroutine evalsurfacenurbs(u,v,uknotvec,vknotvec,udegree,vdegree,pw,nctlu,nctlv,ndim,m,n,val) ! in :libspline:evalSurfaceNURBS.f90
-            real(kind=realtype) dimension(m,n),intent(in) :: u
-            real(kind=realtype) dimension(m,n),intent(in),depend(m,n) :: v
-            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
-            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(vdegree,nctlv) :: vknotvec
-            integer, required,intent(in) :: udegree
-            integer, required,intent(in) :: vdegree
-            real(kind=realtype) dimension(1 + ndim,nctlv,nctlu),intent(in) :: pw
-            integer, required,intent(in),check(shape(pw, 2) == nctlu),depend(pw) :: nctlu=shape(pw, 2)
-            integer, required,intent(in),check(shape(pw, 1) == nctlv),depend(pw) :: nctlv=shape(pw, 1)
-            integer, optional,intent(in),check(shape(pw, 0) == 1 + ndim),depend(pw) :: ndim=-1 + shape(pw, 0)
-            integer, optional,intent(in),check(shape(u, 0) == m),depend(u) :: m=shape(u, 0)
-            integer, optional,intent(in),check(shape(u, 1) == n),depend(u) :: n=shape(u, 1)
-            real(kind=realtype) dimension(ndim,m,n),intent(out),depend(ndim,n,m) :: val
-        end subroutine evalsurfacenurbs
         subroutine basis(u,degree,knotvec,span,nctl,b) ! in :libspline:basis.f90
+            use precision
             real(kind=realtype) intent(in) :: u
             integer, required,intent(in) :: degree
             real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
@@ -61,7 +12,129 @@ python module libspline ! in
             integer, required,intent(in) :: nctl
             real(kind=realtype) dimension(1 + degree),intent(out),depend(degree) :: b
         end subroutine basis
+        subroutine derivbasis(u,degree,knotvec,span,nctl,order,bd) ! in :libspline:basis.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
+            integer intent(in) :: span
+            integer, required,intent(in) :: nctl
+            integer intent(in) :: order
+            real(kind=realtype) dimension(1 + min(degree, order),1 + degree),intent(out),depend(order,degree) :: bd
+        end subroutine derivbasis
+        subroutine bin(n,k,bincoeff) ! in :libspline:binomialCoeff.f90
+            integer intent(in) :: n
+            integer intent(in) :: k
+            integer intent(out) :: bincoeff
+        end subroutine bin
+        subroutine evalcurve(u,knotvec,degree,p,nctl,ndim,npts,val) ! in :libspline:evalCurve.f90
+            use precision
+            real(kind=realtype) dimension(npts),intent(in) :: u
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: p
+            integer, optional,intent(in),check(shape(p, 1) == nctl),depend(p) :: nctl=shape(p, 1)
+            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
+            integer, optional,intent(in),check(shape(u, 0) == npts),depend(u) :: npts=shape(u, 0)
+            real(kind=realtype) dimension(ndim,npts),intent(out),depend(npts,ndim) :: val
+        end subroutine evalcurve
+        subroutine derivevalcurve(u,knotvec,degree,p,order,nctl,ndim,ck) ! in :libspline:evalCurve.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: p
+            integer intent(in) :: order
+            integer, optional,intent(in),check(shape(p, 1) == nctl),depend(p) :: nctl=shape(p, 1)
+            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
+            real(kind=realtype) dimension(ndim,1 + order),intent(out),depend(order,ndim) :: ck
+        end subroutine derivevalcurve
+        subroutine evalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,npts,val) ! in :libspline:evalCurveNURBS.f90
+            use precision
+            real(kind=realtype) dimension(npts),intent(in) :: u
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
+            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
+            integer, optional,intent(in),check(shape(u, 0) == npts),depend(u) :: npts=shape(u, 0)
+            real(kind=realtype) dimension(ndim,npts),intent(out),depend(npts,ndim) :: val
+        end subroutine evalcurvenurbs
+        subroutine derivevalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,order,ck) ! in :libspline:evalCurveNURBS.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
+            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
+            integer intent(in) :: order
+            real(kind=realtype) dimension(-1 + ndim,1 + order),intent(out),depend(order,ndim) :: ck
+        end subroutine derivevalcurvenurbs
+        subroutine evalsurface(u,v,uknotvec,vknotvec,udegree,vdegree,p,nctlu,nctlv,ndim,n,m,val) ! in :libspline:evalSurface.f90
+            use precision
+            real(kind=realtype) dimension(m,n),intent(in) :: u
+            real(kind=realtype) dimension(m,n),intent(in),depend(m,n) :: v
+            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
+            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(nctlv,vdegree) :: vknotvec
+            integer, required,intent(in) :: udegree
+            integer, required,intent(in) :: vdegree
+            real(kind=realtype) dimension(ndim,nctlv,nctlu),intent(in) :: p
+            integer, optional,intent(in),check(shape(p, 2) == nctlu),depend(p) :: nctlu=shape(p, 2)
+            integer, optional,intent(in),check(shape(p, 1) == nctlv),depend(p) :: nctlv=shape(p, 1)
+            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
+            integer, optional,intent(in),check(shape(u, 1) == n),depend(u) :: n=shape(u, 1)
+            integer, optional,intent(in),check(shape(u, 0) == m),depend(u) :: m=shape(u, 0)
+            real(kind=realtype) dimension(ndim,m,n),intent(out),depend(m,n,ndim) :: val
+        end subroutine evalsurface
+        subroutine derivevalsurface(u,v,uknotvec,vknotvec,udegree,vdegree,p,order,nctlu,nctlv,ndim,skl) ! in :libspline:evalSurface.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            real(kind=realtype) intent(in) :: v
+            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
+            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(nctlv,vdegree) :: vknotvec
+            integer, required,intent(in) :: udegree
+            integer, required,intent(in) :: vdegree
+            real(kind=realtype) dimension(ndim,nctlv,nctlu),intent(in) :: p
+            integer intent(in) :: order
+            integer, optional,intent(in),check(shape(p, 2) == nctlu),depend(p) :: nctlu=shape(p, 2)
+            integer, optional,intent(in),check(shape(p, 1) == nctlv),depend(p) :: nctlv=shape(p, 1)
+            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
+            real(kind=realtype) dimension(ndim,1 + order,1 + order),intent(out),depend(order,ndim) :: skl
+        end subroutine derivevalsurface
+        subroutine evalsurfacenurbs(u,v,uknotvec,vknotvec,udegree,vdegree,pw,nctlu,nctlv,ndim,m,n,val) ! in :libspline:evalSurfaceNURBS.f90
+            use precision
+            real(kind=realtype) dimension(m,n),intent(in) :: u
+            real(kind=realtype) dimension(m,n),intent(in),depend(m,n) :: v
+            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
+            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(nctlv,vdegree) :: vknotvec
+            integer, required,intent(in) :: udegree
+            integer, required,intent(in) :: vdegree
+            real(kind=realtype) dimension(ndim,nctlv,nctlu),intent(in) :: pw
+            integer, optional,intent(in),check(shape(pw, 2) == nctlu),depend(pw) :: nctlu=shape(pw, 2)
+            integer, optional,intent(in),check(shape(pw, 1) == nctlv),depend(pw) :: nctlv=shape(pw, 1)
+            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
+            integer, optional,intent(in),check(shape(u, 0) == m),depend(u) :: m=shape(u, 0)
+            integer, optional,intent(in),check(shape(u, 1) == n),depend(u) :: n=shape(u, 1)
+            real(kind=realtype) dimension(ndim,m,n),intent(out),depend(m,n,ndim) :: val
+        end subroutine evalsurfacenurbs
+        subroutine derivevalsurfacenurbs(u,v,uknotvec,vknotvec,udegree,vdegree,pw,nctlu,nctlv,ndim,order,skl) ! in :libspline:evalSurfaceNURBS.f90
+            use precision
+            real(kind=realtype) intent(in) :: u
+            real(kind=realtype) intent(in) :: v
+            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
+            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(nctlv,vdegree) :: vknotvec
+            integer, required,intent(in) :: udegree
+            integer, required,intent(in) :: vdegree
+            real(kind=realtype) dimension(ndim,nctlv,nctlu),intent(in) :: pw
+            integer, optional,intent(in),check(shape(pw, 2) == nctlu),depend(pw) :: nctlu=shape(pw, 2)
+            integer, optional,intent(in),check(shape(pw, 1) == nctlv),depend(pw) :: nctlv=shape(pw, 1)
+            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
+            integer intent(in) :: order
+            real(kind=realtype) dimension(-1 + ndim,1 + order,1 + order),intent(out),depend(order,ndim) :: skl
+        end subroutine derivevalsurfacenurbs
         subroutine findspan(u,degree,knotvec,nctl,span) ! in :libspline:findSpan.f90
+            use precision
             real(kind=realtype) intent(in) :: u
             integer, required,intent(in) :: degree
             real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
@@ -71,24 +144,11 @@ python module libspline ! in
         subroutine multiplicity(u,knotvec,nctl,degree,mult) ! in :libspline:multiplicity.f90
             use precision
             real(kind=realtype) intent(in) :: u
-            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
             integer, required,intent(in) :: nctl
             integer, required,intent(in) :: degree
             integer intent(out) :: mult
         end subroutine multiplicity
-        subroutine insertknot(u,r,knotvec,degree,ctrlpts,nctl,ndim,knotvecnew,ctrlptsnew,spannew) ! in :libspline:insertKnot.f90
-            use precision
-            real(kind=realtype) intent(in) :: u
-            integer intent(in, out) :: r
-            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
-            integer, required,intent(in) :: degree
-            real(kind=realtype) dimension(ndim,nctl),intent(in) :: ctrlpts
-            integer, optional,intent(in),check(shape(ctrlpts, 1) == nctl),depend(ctrlpts) :: nctl=shape(ctrlpts, 1)
-            integer, optional,intent(in),check(shape(ctrlpts, 0) == ndim),depend(ctrlpts) :: ndim=shape(ctrlpts, 0)
-            real(kind=realtype) dimension(1 + degree + nctl + r),intent(out),depend(degree,nctl,r) :: knotvecnew
-            real(kind=realtype) dimension(ndim,nctl + r),intent(out),depend(nctl,r,ndim) :: ctrlptsnew
-            integer intent(out) :: spannew
-        end subroutine insertknot
     end interface 
 end python module libspline
 
