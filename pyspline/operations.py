@@ -1,6 +1,6 @@
 # Standard Python modules
 from copy import deepcopy
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 # External modules
 import numpy as np
@@ -31,7 +31,6 @@ def decomposeCurve(curve: CURVETYPE) -> List[CURVETYPE]:
     List[Union[BSplineCurve, NURBSCurve]]
         List of Bezier curve segments of the same degree as the input curve.
     """
-    curve = deepcopy(curve)
     internalKnots = curve.knotVec[curve.degree + 1 : -(curve.degree + 1)]
     newCurves = []
     while len(internalKnots) > 0:
@@ -473,7 +472,6 @@ def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BS
 
     # Splitting in the u-direction
     if direction == "u":
-
         _, breakPnt = insertKnot(surf, [param, None], [surf.uDegree - 1, 0])
 
         # Break point is to the right so we need to adjust the counter to the left
@@ -596,7 +594,6 @@ def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
     the range of (0, 1)
     """
     u = checkInput(u, "u", float, 0)
-    curve = deepcopy(curve)  # Make a copy so we don't alter the original curve
 
     if u <= 0.0:
         if curve._rational:
@@ -620,34 +617,36 @@ def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
     # r = degree - multiplicity
     r = curve.degree - s
 
-    insertKnot(curve, [u], [r], check=False)
-    kNew = utils.findSpan(u, curve.degree, curve.knotVec, curve.nCtl) + 1
+    tempCurve = deepcopy(curve)  # Make a copy so we don't alter the original curve
+    insertKnot(tempCurve, [u], [r], check=False)
+    kNew = utils.findSpan(u, tempCurve.degree, tempCurve.knotVec, tempCurve.nCtl) + 1
 
     # Allocate the new knot vectors
-    knotVec1 = np.zeros(len(curve.knotVec[:kNew]) + 1)
-    knotVec2 = np.zeros(len(curve.knotVec[kNew:]) + curve.degree + 1)
+    knotVec1 = np.zeros(len(tempCurve.knotVec[:kNew]) + 1)
+    knotVec2 = np.zeros(len(tempCurve.knotVec[kNew:]) + tempCurve.degree + 1)
 
     # Copy over the knots and make sure they are clamped
-    knotVec1[:kNew] = curve.knotVec[:kNew]
-    knotVec2[curve.degree + 1 :] = curve.knotVec[kNew:]
+    knotVec1[:kNew] = tempCurve.knotVec[:kNew]
     knotVec1[-1] = u
-    knotVec2[: curve.degree + 1] = u
+
+    knotVec2[tempCurve.degree + 1 :] = tempCurve.knotVec[kNew:]
+    knotVec2[: tempCurve.degree + 1] = u
 
     # Allocate the new control points
-    ctlPnts = curve.ctrlPntsW if curve._rational else curve.ctrlPnts
+    ctlPnts = tempCurve.ctrlPntsW if tempCurve.rational else tempCurve.ctrlPnts
     ctlPnts1 = np.zeros((len(ctlPnts[: kOrig + r]), ctlPnts.shape[-1]))
     ctlPnts2 = np.zeros((len(ctlPnts[kOrig + r - 1 :]), ctlPnts.shape[-1]))
 
-    ctlPnts1 = ctlPnts[: kOrig + r, :]
-    ctlPnts2 = ctlPnts[kOrig + r - 1 :, :]
+    ctlPnts1 = ctlPnts[: kOrig + r]
+    ctlPnts2 = ctlPnts[kOrig + r - 1 :]
 
     # Create the new curves
-    if curve._rational:
-        newCurve1 = NURBSCurve(curve.degree, knotVec1, ctlPnts1)
-        newCurve2 = NURBSCurve(curve.degree, knotVec2, ctlPnts2)
+    if curve.rational:
+        newCurve1 = NURBSCurve(tempCurve.degree, knotVec1, ctlPnts1)
+        newCurve2 = NURBSCurve(tempCurve.degree, knotVec2, ctlPnts2)
     else:
-        newCurve1 = BSplineCurve(curve.degree, knotVec1, ctlPnts1)
-        newCurve2 = BSplineCurve(curve.degree, knotVec2, ctlPnts2)
+        newCurve1 = BSplineCurve(tempCurve.degree, knotVec1, ctlPnts1)
+        newCurve2 = BSplineCurve(tempCurve.degree, knotVec2, ctlPnts2)
 
     return newCurve1, newCurve2
 

@@ -2,9 +2,10 @@
 from copy import deepcopy
 from typing import Optional, Tuple
 
+import numpy as np
+
 # External modules
 from baseclasses.utils import Error
-import numpy as np
 from scipy import sparse
 from scipy.special import binom
 
@@ -154,25 +155,24 @@ def insertKnotCP(
     temp = np.zeros((degree + 1, nDim))
 
     # Copy over the unaltered control points
-    ctrlPtsNew[: span - degree + 1, :] = ctrlPts[: span - degree + 1, :]
-    ctrlPtsNew[span - s + num : nctl + num, :] = ctrlPts[span - s : nctl, :]
+    ctrlPtsNew[: span - degree + 1] = ctrlPts[: span - degree + 1]
+    ctrlPtsNew[span - s + num : nctl + num] = ctrlPts[span - s : nctl]
 
-    temp[0 : degree - s + 1, :] = ctrlPts[0 + span - degree : span - s + 1, :]
+    temp[: degree - s + 1] = deepcopy(ctrlPts[span - degree : span - s + 1])
 
     # Insert the knot "num" times
     for j in range(1, num + 1):
         L = span - degree + j
         for i in range(0, degree - j - s + 1):
             alpha = (knot - knotVec[L + i]) / (knotVec[i + span + 1] - knotVec[L + i])
-            temp[i, :] = alpha * temp[i + 1, :] + (1.0 - alpha) * temp[i, :]
+            temp[i] = alpha * temp[i + 1] + (1.0 - alpha) * temp[i]
 
-        ctrlPtsNew[L] = temp[0, :]
-        ctrlPtsNew[span + num - j - s, :] = temp[degree - j - s, :]
+        ctrlPtsNew[L] = deepcopy(temp[0])
+        ctrlPtsNew[span + num - j - s] = deepcopy(temp[degree - j - s])
 
     # Load the remaining control points
     L = span - degree + num
-    for i in range(L + 1, span - s):
-        ctrlPtsNew[i, :] = temp[i - L, :]
+    ctrlPtsNew[L + 1 : span - s] = deepcopy(temp[1 : span - s - L])
 
     return ctrlPtsNew
 
@@ -252,7 +252,7 @@ def refineKnotCurve(
 
         newCtrlPnts[k - degree - 1] = deepcopy(newCtrlPnts[k - degree])
 
-        for l in range(1, degree + 1):
+        for l in range(1, degree + 1):  # noqa
             idx = k - degree + l
             alpha = newKnotVec[k + l] - X[j]
 
@@ -335,7 +335,7 @@ def removeKnotCtrlPnts(
     ctrlPnts: np.ndarray,
     knot: float,
     num: int = 1,
-    tol: float = 1e-4,
+    tol: float = 1e-6,
     s: Optional[int] = None,
     span: Optional[int] = None,
 ) -> np.ndarray:
@@ -370,8 +370,8 @@ def removeKnotCtrlPnts(
         _description_
     """
     nCtl = len(ctrlPnts)
-    s = libspline.multiplicity(knot, knotVec, nCtl, degree) if s is None else s
-    span = libspline.findspan(knot, degree, knotVec, nCtl) if span is None else span
+    s = multiplicity(knot, knotVec, nCtl, degree) if s is None else s
+    span = findSpan(knot, degree, knotVec, nCtl) if span is None else span
 
     # Check for edge case where we aren't removing any knots
     if num < 1:
@@ -384,21 +384,23 @@ def removeKnotCtrlPnts(
     # Dont change the input control point array, just copy it over
     newCtrlPnts = deepcopy(ctrlPnts)
 
+    # Check if the geometry is a curve, surface, or volume by the shape of the cpts
+    isVolume = True if len(ctrlPnts.shape) > 2 else False
+
     # We need to check the control point data structure for the geometry type
-    if len(ctrlPnts.shape) > 2:
+    if isVolume:
         temp = np.zeros(((2 * degree) + 1, nCtl, ctrlPnts.shape[-1]))
     else:
         temp = np.zeros(((2 * degree) + 1, ctrlPnts.shape[-1]))
 
     # Loop to compute Eqs. 5.28 and 5.29 from The NURBS Book
     for t in range(0, num):
-        off = first - 1
-        temp[0] = ctrlPnts[off]
-        temp[last + 1 - off] = ctrlPnts[last + 1]
+        temp[0] = ctrlPnts[first - 1]
+        temp[last - first + 2] = ctrlPnts[last + 1]
         i = first
         j = last
         ii = 1
-        jj = last - off
+        jj = last - first + 1
         remFlag = False
 
         # Compute control points for one removal step
@@ -406,7 +408,7 @@ def removeKnotCtrlPnts(
             alphai = (knot - knotVec[i]) / (knotVec[i + degree + 1 + t] - knotVec[i])
             alphaj = (knot - knotVec[j - t]) / (knotVec[j + degree + 1] - knotVec[j - t])
 
-            if len(ctrlPnts.shape) > 2:
+            if isVolume:
                 temp[ii, :nCtl] = (ctrlPnts[i, :nCtl] - (1.0 - alphai) * temp[ii - 1, :nCtl]) / alphai
                 temp[jj, :nCtl] = (ctrlPnts[j, :nCtl] - alphaj * temp[jj + 1, :nCtl]) / (1.0 - alphaj)
             else:
@@ -420,7 +422,7 @@ def removeKnotCtrlPnts(
 
         # Now we need to check if the knot can be removed
         if j - i < t:
-            if len(ctrlPnts.shape) > 2:
+            if isVolume:
                 if np.linalg.norm(temp[jj + 1, 0] - temp[ii - 1, 0]) <= tol:
                     remFlag = True
             else:
@@ -429,7 +431,7 @@ def removeKnotCtrlPnts(
 
         else:
             alphai = (knot - knotVec[i]) / (knotVec[i + degree + 1 + t] - knotVec[i])
-            if len(ctrlPnts.shape) > 2:
+            if isVolume:
                 ptn = (alphai * temp[ii + t + 1, 0]) + ((1.0 - alphai) * temp[ii - 1, 0])
             else:
                 ptn = (alphai * temp[ii + t + 1]) + ((1.0 - alphai) * temp[ii - 1])
@@ -442,8 +444,8 @@ def removeKnotCtrlPnts(
             i = first
             j = last
             while j - i > t:
-                newCtrlPnts[i] = temp[i - off]
-                newCtrlPnts[j] = temp[j - off]
+                newCtrlPnts[i] = temp[i - first + 1]
+                newCtrlPnts[j] = temp[j - first + 1]
                 i += 1
                 j -= 1
 
