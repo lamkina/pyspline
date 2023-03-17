@@ -136,53 +136,64 @@ def elevateDegree(geo: GEOTYPE, param: Union[List, np.ndarray, Tuple]) -> None:
         The number of times to elevate the degree.
     """
     if isinstance(geo, BSplineCurve):
-        internalKnots = np.unique(geo.knotVec[geo.degree + 1 : -(geo.degree + 1)])
-        multList = []
-        for intKnot in internalKnots:
-            s = utils.multiplicity(intKnot, geo.knotVec, geo.nCtl, geo.degree)
-            multList.append(s)
-
-        # Decompose the curve into bezier segments
-        curveList = decomposeCurve(geo)
-
-        if param[0] > 0:
-            for curve in curveList:
-                ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
-                newCtrlPnts = utils.elevateDegreeCurve(curve.degree, ctrlPnts, num=param[0])
-                curve.degree += param[0]
-                if curve.rational:
-                    curve.ctrlPntsW = newCtrlPnts
-                else:
-                    curve.ctrlPnts = newCtrlPnts
-
-                knotStart = np.repeat(curve.knotVec[0], param[0])
-                knotEnd = np.repeat(curve.knotVec[-1], param[0])
-                curve.knotVec = np.concatenate([knotStart, curve.knotVec, knotEnd])
-
-            nd = geo.degree + param[0]
-
-            num = geo.degree + 1
-
-        # Combine the Bezier curve segments back into a full
-        knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
-
-        # Set the control points depending on rational/non-rational curve
-        ctrlPnts = compatibility.combineCtrlPnts(ctrlPnts, weights) if geo.rational else ctrlPnts
-
-        # Apply knot removal
-        for knot, s in zip(knotList, multList):
-            span = utils.findSpan(knot, nd, knotVec, len(ctrlPnts))
-            ctrlPnts = utils.removeKnotCtrlPnts(nd, knotVec, ctrlPnts, knot, num=num - s)
-            knotVec = utils.removeKnotKV(knotVec, span, num - s)
-
-        # Update the input curve
-        geo.degree = nd
+        ctrlPnts = geo.ctrlPntsW if geo.rational else geo.ctrlPnts
+        _, knotVecNew, ctrlPntsNew = utils.elevateDegreeCurve(
+            geo.nCtl - 1, geo.degree, geo.knotVec, geo.ctrlPntsW, param[0]
+        )
+        geo.degree = geo.degree + param[0]
         if geo.rational:
-            geo.ctrlPntsW = ctrlPnts
+            geo.ctrlPntsW = ctrlPntsNew
         else:
-            geo.ctrlPnts = ctrlPnts
+            geo.ctrlPnts = ctrlPntsNew
+        geo.knotVec = knotVecNew
 
-        geo.knotVec = knotVec
+        # internalKnots = np.unique(geo.knotVec[geo.degree + 1 : -(geo.degree + 1)])
+        # multList = []
+        # for intKnot in internalKnots:
+        #     s = utils.multiplicity(intKnot, geo.knotVec, geo.nCtl, geo.degree)
+        #     multList.append(s)
+
+        # # Decompose the curve into bezier segments
+        # curveList = decomposeCurve(geo)
+
+        # if param[0] > 0:
+        #     for curve in curveList:
+        #         ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
+        #         newCtrlPnts = utils.elevateDegreeCurve(curve.degree, ctrlPnts, num=param[0])
+        #         curve.degree += param[0]
+        #         if curve.rational:
+        #             curve.ctrlPntsW = newCtrlPnts
+        #         else:
+        #             curve.ctrlPnts = newCtrlPnts
+
+        #         knotStart = np.repeat(curve.knotVec[0], param[0])
+        #         knotEnd = np.repeat(curve.knotVec[-1], param[0])
+        #         curve.knotVec = np.concatenate([knotStart, curve.knotVec, knotEnd])
+
+        #     nd = geo.degree + param[0]
+
+        #     num = geo.degree + 1
+
+        # # Combine the Bezier curve segments back into a full
+        # knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
+
+        # # Set the control points depending on rational/non-rational curve
+        # ctrlPnts = compatibility.combineCtrlPnts(ctrlPnts, weights) if geo.rational else ctrlPnts
+
+        # # Apply knot removal
+        # for knot, s in zip(knotList, multList):
+        #     span = utils.findSpan(knot, nd, knotVec, len(ctrlPnts))
+        #     ctrlPnts = utils.removeKnotCtrlPnts(nd, knotVec, ctrlPnts, knot, num=num - s)
+        #     knotVec = utils.removeKnotKV(knotVec, span, num - s)
+
+        # # Update the input curve
+        # geo.degree = nd
+        # if geo.rational:
+        #     geo.ctrlPntsW = ctrlPnts
+        # else:
+        #     geo.ctrlPnts = ctrlPnts
+
+        # geo.knotVec = knotVec
 
 
 def reduceDegree(geo: GEOTYPE, param: List[int]) -> None:

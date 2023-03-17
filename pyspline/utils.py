@@ -2,10 +2,9 @@
 from copy import deepcopy
 from typing import Optional, Tuple
 
-import numpy as np
-
 # External modules
 from baseclasses.utils import Error
+import numpy as np
 from scipy import sparse
 from scipy.special import binom
 
@@ -510,56 +509,56 @@ def removeKnotKV(knotVec: np.ndarray, span: int, num: int) -> np.ndarray:
     return newKnotVec
 
 
-def elevateDegreeCurve(degree: int, ctrlPnts: np.ndarray, num: int = 1, check: bool = True):
-    """Computes the control points of the rational/non-rational spline after degree elevation.
+# def elevateDegreeCurve(degree: int, ctrlPnts: np.ndarray, num: int = 1, check: bool = True):
+#     """Computes the control points of the rational/non-rational spline after degree elevation.
 
-    Adapted python implementation from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
-    by Bingol and Krishnamurthy
+#     Adapted python implementation from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
+#     by Bingol and Krishnamurthy
 
-    The original source is Eq. 5.36 of the NURBS Book by Piegl &B Tiller, p.205
+#     The original source is Eq. 5.36 of the NURBS Book by Piegl &B Tiller, p.205
 
-    Parameters
-    ----------
-    degree : int
-        The degree of the spline geometry
-    ctrlPnts : np.ndarray
-        The control points of the spline geometry
-    num : int, optional
-        The number of times to elevate the degree, by default 1
-    check : bool, optional
-        If True, checks the validity of the degree elevation.  Skips the
-        check if False, by default True
+#     Parameters
+#     ----------
+#     degree : int
+#         The degree of the spline geometry
+#     ctrlPnts : np.ndarray
+#         The control points of the spline geometry
+#     num : int, optional
+#         The number of times to elevate the degree, by default 1
+#     check : bool, optional
+#         If True, checks the validity of the degree elevation.  Skips the
+#         check if False, by default True
 
-    Returns
-    -------
-    np.ndarray
-        The control points of the elevated Bezier geometry
+#     Returns
+#     -------
+#     np.ndarray
+#         The control points of the elevated Bezier geometry
 
-    Raises
-    ------
-    ValueError
-        If the underlying geometry is not a Bezier type
-    ValueError
-        If the number of degree elevations is infeasible
-    """
-    if check:
-        if degree + 1 != len(ctrlPnts):
-            raise ValueError("Can only use degree elevation with Bezier geometries.")
-        if num <= 0:
-            raise ValueError(f"Cannot elevate the degree {num} times.")
+#     Raises
+#     ------
+#     ValueError
+#         If the underlying geometry is not a Bezier type
+#     ValueError
+#         If the number of degree elevations is infeasible
+#     """
+#     if check:
+#         if degree + 1 != len(ctrlPnts):
+#             raise ValueError("Can only use degree elevation with Bezier geometries.")
+#         if num <= 0:
+#             raise ValueError(f"Cannot elevate the degree {num} times.")
 
-    numElevPnts = degree + 1 + num
-    elevPnts = np.zeros((numElevPnts, len(ctrlPnts[0])))
+#     numElevPnts = degree + 1 + num
+#     elevPnts = np.zeros((numElevPnts, len(ctrlPnts[0])))
 
-    for i in range(0, numElevPnts):
-        start = max(0, (i - num))
-        end = min(degree, i)
-        for j in range(start, end + 1):
-            coeff = binom(degree, j) * binom(num, (i - j))
-            coeff /= binom((degree + num), i)
-            elevPnts[i] = elevPnts[i] + (coeff * ctrlPnts[j])
+#     for i in range(0, numElevPnts):
+#         start = max(0, (i - num))
+#         end = min(degree, i)
+#         for j in range(start, end + 1):
+#             coeff = binom(degree, j) * binom(num, (i - j))
+#             coeff /= binom((degree + num), i)
+#             elevPnts[i] = elevPnts[i] + (coeff * ctrlPnts[j])
 
-    return elevPnts
+#     return elevPnts
 
 
 def assembleMatrix(data, indices, indptr, shape):
@@ -766,3 +765,162 @@ def searchQuads(pts, conn, searchPts):
     """
 
     return libspline.adtprojections.searchquads(pts, conn, searchPts)
+
+
+def elevateDegreeCurve(
+    n: int, degree: int, knotVec: np.ndarray, ctrlPnts: np.ndarray, t: int
+) -> Tuple[int, np.ndarray, np.ndarray]:
+    m = n + degree + 1
+    ph = degree + t
+    ph2 = int(np.floor(ph / 2))
+
+    # Compute Bézier degree elevation coefficients
+    bezalfs = np.zeros((degree + t + 1, degree + 1))
+    bezalfs[0, 0] = 1.0
+    bezalfs[ph, degree] = 1.0
+
+    for i in range(1, ph2 + 1):
+        inv = 1.0 / binom(ph, i)
+        mpi = min(degree, i)
+
+        for j in range(max(0, i - t), mpi + 1):
+            bezalfs[i, j] = inv * binom(degree, j) * binom(t, i - j)
+
+    for i in range(ph2 + 1, ph):
+        mpi = min(degree, i)
+
+        for j in range(max(0, i - t), mpi + 1):
+            bezalfs[i, j] = bezalfs[ph - i, degree - j]
+
+    mh = ph
+    kind = ph + 1
+    r = -1
+    a = degree
+    b = degree + 1
+    cind = 1
+    ua = knotVec[0]
+
+    # We need to figure out the internal knot multiplicities to correctly
+    # allocate the new knot vector and control points
+    internalKnots = np.unique(knotVec[degree + 1 : -(degree + 1)])
+    s = mh
+    for knot in internalKnots:
+        s += multiplicity(knot, knotVec, len(ctrlPnts), degree) + t
+
+    Qw = np.zeros((s + 1, ctrlPnts.shape[-1]))
+    Uh = np.zeros(s + ph + 2)
+    bpts = np.zeros((degree + 1, ctrlPnts.shape[-1]))
+    nextbpts = np.zeros((degree - 1, ctrlPnts.shape[-1]))
+    ebpts = np.zeros((degree + t + 1, ctrlPnts.shape[-1]))
+
+    Qw[0] = ctrlPnts[0]
+
+    for i in range(0, ph + 1):
+        Uh[i] = ua
+
+    # Initialize first Bézier segment
+    for i in range(0, degree + 1):
+        bpts[i] = ctrlPnts[i]
+
+    # Big loop through the knot vector
+    while b < m:
+        i = b
+        while b < m and knotVec[b] == knotVec[b + 1]:
+            b += 1
+        mul = b - i + 1
+        mh += mul + t
+        ub = knotVec[b]
+        oldr = r
+        r = degree - mul
+
+        # Insert knot u[b] r times
+        lbz = int(np.floor((oldr + 2) / 2)) if oldr > 0 else 1
+        rbz = int(np.floor(ph - (r + 1) / 2)) if r > 0 else ph
+
+        if r > 0:
+            # Insert knot to get Bézier segment
+            numer = ub - ua
+            alfs = np.zeros(degree - 1)
+            for k in range(degree, mul, -1):
+                alfs[k - mul - 1] = numer / (knotVec[a + k] - ua)
+
+            for j in range(1, r + 1):
+                save = r - j
+                s = mul + j
+
+                for k in range(degree, s - 1, -1):
+                    bpts[k] = alfs[k - s] * bpts[k] + (1.0 - alfs[k - s]) * bpts[k - 1]
+
+                nextbpts[save] = bpts[degree]
+
+            # End of knot insertion
+
+        # Degree elevate the Bêzier segments
+        for i in range(lbz, ph + 1):
+            # Only points in lbz, ... , ph are used below
+            ebpts[i] = 0.0
+            mpi = min(degree, i)
+            for j in range(max(0, i - t), mpi + 1):
+                ebpts[i] = ebpts[i] + bezalfs[i, j] * bpts[j]
+
+        # End of degree elevation for Bézier segments
+
+        if oldr > 1:
+            # Must remove knot u=U[a] oldr times
+            first = kind - 2
+            last = kind
+            den = ub - ua
+            bet = (ub - Uh[kind - 1]) / den
+            for tr in range(1, oldr):
+                # Knot removal loop
+                i = first
+                j = last
+                kj = j - kind + 1
+
+                # Loop and compute the new control points for one removal step
+                while j - i > tr:
+                    if i < cind:
+                        alf = (ub - Uh[i]) / (ua - Uh[i])
+                        Qw[i] = alf * Qw[i] + (1.0 - alf) * Qw[i - i]
+
+                    if j >= lbz:
+                        if j - tr <= kind - ph + oldr:
+                            gam = (ub - Uh[j - tr]) / den
+                            ebpts[k] = gam * ebpts[kj] + (1.0 - gam) * ebpts[kj + 1]
+                        else:
+                            ebpts[kj] = bet * ebpts[kj] + (1.0 - bet) * ebpts[kj + 1]
+
+                first -= 1
+                last += 1
+                # End of removing knot u=U[a]
+
+        if a != degree:  # Load the knot ua
+            for _i in range(0, ph - oldr):
+                Uh[kind] = ua
+                kind += 1
+
+        # Load ctrl pts into Qw
+        for j in range(lbz, rbz + 1):
+            Qw[cind] = ebpts[j]
+            cind += 1
+
+        if b < m:
+            # set up for next pass through loop
+            for j in range(0, r):
+                bpts[j] = nextbpts[j]
+
+            for j in range(r, degree + 1):
+                bpts[j] = ctrlPnts[b - degree + j]
+
+            a = b
+            b += 1
+            ua = ub
+        else:
+            # End knot
+            for i in range(0, ph + 1):
+                Uh[kind + i] = ub
+
+    # End of big while loop
+    nh = mh - ph - 1
+
+    return nh, Uh, Qw
