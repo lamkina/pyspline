@@ -136,72 +136,64 @@ def elevateDegree(geo: GEOTYPE, param: Union[List, np.ndarray, Tuple]) -> None:
         The number of times to elevate the degree.
     """
     if isinstance(geo, BSplineCurve):
-        ctrlPnts = geo.ctrlPntsW if geo.rational else geo.ctrlPnts
-        _, knotVecNew, ctrlPntsNew = utils.elevateDegreeCurve(
-            geo.nCtl - 1, geo.degree, geo.knotVec, geo.ctrlPntsW, param[0]
-        )
+        internalKnots = np.unique(geo.knotVec[geo.degree + 1 : -(geo.degree + 1)])
+        multList = []
+        for intKnot in internalKnots:
+            s = utils.multiplicity(intKnot, geo.knotVec, geo.nCtl, geo.degree)
+            multList.append(s)
+
+        # Decompose the curve into bezier segments
+        curveList = decomposeCurve(geo)
+
+        if param[0] > 0:
+            for curve in curveList:
+                ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
+                newCtrlPnts = utils.elevateDegreeBezier(curve.degree, ctrlPnts, num=param[0])
+                curve.degree += param[0]
+                if curve.rational:
+                    curve.ctrlPntsW = newCtrlPnts
+                else:
+                    curve.ctrlPnts = newCtrlPnts
+
+                knotStart = np.repeat(curve.knotVec[0], param[0])
+                knotEnd = np.repeat(curve.knotVec[-1], param[0])
+                curve.knotVec = np.concatenate([knotStart, curve.knotVec, knotEnd])
+
+            nd = geo.degree + param[0]
+
+            num = geo.degree + 1
+
+        # Combine the Bezier curve segments back into a full
+        knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
+
+        # Set the control points depending on rational/non-rational curve
+        ctrlPnts = compatibility.combineCtrlPnts(ctrlPnts, weights) if geo.rational else ctrlPnts
+
+        # Apply knot removal
+        for knot, s in zip(knotList, multList):
+            ctrlPnts, knotVec = utils.removeKnotCurve(nd, knotVec, ctrlPnts, knot, num=num - s)
+
+        # Update the input curve
         geo.degree = geo.degree + param[0]
         if geo.rational:
-            geo.ctrlPntsW = ctrlPntsNew
+            geo.ctrlPntsW = ctrlPnts
         else:
-            geo.ctrlPnts = ctrlPntsNew
-        geo.knotVec = knotVecNew
+            geo.ctrlPnts = ctrlPnts
 
-        # internalKnots = np.unique(geo.knotVec[geo.degree + 1 : -(geo.degree + 1)])
-        # multList = []
-        # for intKnot in internalKnots:
-        #     s = utils.multiplicity(intKnot, geo.knotVec, geo.nCtl, geo.degree)
-        #     multList.append(s)
-
-        # # Decompose the curve into bezier segments
-        # curveList = decomposeCurve(geo)
-
-        # if param[0] > 0:
-        #     for curve in curveList:
-        #         ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
-        #         newCtrlPnts = utils.elevateDegreeCurve(curve.degree, ctrlPnts, num=param[0])
-        #         curve.degree += param[0]
-        #         if curve.rational:
-        #             curve.ctrlPntsW = newCtrlPnts
-        #         else:
-        #             curve.ctrlPnts = newCtrlPnts
-
-        #         knotStart = np.repeat(curve.knotVec[0], param[0])
-        #         knotEnd = np.repeat(curve.knotVec[-1], param[0])
-        #         curve.knotVec = np.concatenate([knotStart, curve.knotVec, knotEnd])
-
-        #     nd = geo.degree + param[0]
-
-        #     num = geo.degree + 1
-
-        # # Combine the Bezier curve segments back into a full
-        # knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
-
-        # # Set the control points depending on rational/non-rational curve
-        # ctrlPnts = compatibility.combineCtrlPnts(ctrlPnts, weights) if geo.rational else ctrlPnts
-
-        # # Apply knot removal
-        # for knot, s in zip(knotList, multList):
-        #     span = utils.findSpan(knot, nd, knotVec, len(ctrlPnts))
-        #     ctrlPnts = utils.removeKnotCtrlPnts(nd, knotVec, ctrlPnts, knot, num=num - s)
-        #     knotVec = utils.removeKnotKV(knotVec, span, num - s)
-
-        # # Update the input curve
-        # geo.degree = nd
-        # if geo.rational:
-        #     geo.ctrlPntsW = ctrlPnts
-        # else:
-        #     geo.ctrlPnts = ctrlPnts
-
-        # geo.knotVec = knotVec
+        geo.knotVec = knotVec
 
 
-def reduceDegree(geo: GEOTYPE, param: List[int]) -> None:
+def reduceDegree(geo: GEOTYPE, param: List[int], tol: float = 1e-10) -> None:
     """Reduces the degree of a spline geometry by an amount specified
     by `param`.
 
     Adapted python implementation from: "NURBS-Python: An open-source object-oriented NURBS modeling framework in Python",
     by Bingol and Krishnamurthy
+
+    Note: Degree reduction involves a procedure for knot removal that
+    introduces parameteric error into the curve.  For NURBS curves, be
+    aware the reduction may result in a non-exact representation of the
+    original curve.
 
     Parameters
     ----------
@@ -222,7 +214,7 @@ def reduceDegree(geo: GEOTYPE, param: List[int]) -> None:
 
         for curve in curveList:
             ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
-            newCtrlPnts = utils.reduceDegreeCurve(curve.degree, ctrlPnts)
+            newCtrlPnts, maxErr = utils.reduceDegreeBezier(curve.degree, ctrlPnts)
             curve.degree -= 1
 
             if curve.rational:
@@ -232,11 +224,9 @@ def reduceDegree(geo: GEOTYPE, param: List[int]) -> None:
 
             curve.knotVec = curve.knotVec[1:-1]
 
-        # Compute new degree
-        nd = geo.degree - 1
+        nd = geo.degree - param[0]
 
-        # Number of knot removals
-        num = geo.degree - 1
+        num = geo.degree + 1
 
         # Combine the Bezier curve segments back into a full
         knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
@@ -246,12 +236,10 @@ def reduceDegree(geo: GEOTYPE, param: List[int]) -> None:
 
         # Apply knot removal
         for knot, s in zip(knotList, multList):
-            span = utils.findSpan(knot, nd, knotVec, len(ctrlPnts))
-            ctrlPnts = utils.removeKnotCtrlPnts(nd, knotVec, ctrlPnts, knot, num=num - s)
-            knotVec = utils.removeKnotKV(knotVec, span, num - s)
+            ctrlPnts, knotVec = utils.removeKnotCurve(nd, knotVec, ctrlPnts, knot, num=num - s, tol=tol)
 
         # Update the input curve
-        geo.degree = nd
+        geo.degree = geo.degree - 1
         if geo.rational:
             geo.ctrlPntsW = ctrlPnts
         else:
@@ -280,9 +268,8 @@ def refineKnotVector(geo: GEOTYPE, param: Union[List, np.ndarray, Tuple], densit
 
             geo.knotVec = newKnotVec
 
-    if isinstance(geo, BSplineSurface):
-        # TODO: AL, add surface knot refinement
-        pass
+    else:
+        raise NotImplementedError("Knot vector refinement is not yet supported for Surfaces and Volumes.")
 
 
 def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = True) -> Tuple[int]:
@@ -438,8 +425,27 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = T
             else:
                 geo.ctrlPnts = newCtrlPnts
 
-    elif isinstance(geo, BSplineVolume):
-        pass
+    else:
+        raise NotImplementedError("Knot insertion is not yet supported for Volumes.")
+
+
+def removeKnot(geo: GEOTYPE, param: List[float], num: int, tol: float = 1e-8):
+    if isinstance(geo, BSplineCurve):
+        knot = checkInput(param[0], "param[0]", float, 0)
+        ru = checkInput(num, "num", int, 0)
+
+        ctrlPnts = geo.ctrlPntsW if geo.rational else geo.ctrlPnts
+        newCtrlPnts, newKnotVec = utils.removeKnotCurve(geo.degree, geo.knotVec, ctrlPnts, knot, ru, tol)
+
+        if geo.rational:
+            geo.ctrlPntsW = newCtrlPnts
+        else:
+            geo.ctrlPnts = newCtrlPnts
+
+        geo.knotVec = newKnotVec
+
+    else:
+        raise NotImplementedError("Knot removal is not yet supported for Surfaces and Volumes.")
 
 
 def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BSplineSurface]:

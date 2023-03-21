@@ -1,5 +1,5 @@
 # Standard Python modules
-from typing import Optional, Tuple
+from typing import Optional
 
 # External modules
 import numpy as np
@@ -12,7 +12,7 @@ from .bspline import BSplineCurve, BSplineSurface
 from .utils import checkInput
 
 
-def lmsFitCurve(
+def curveLMSApprox(
     points: np.ndarray,
     degree: int,
     nCtl: int,
@@ -86,6 +86,7 @@ def lmsFitCurve(
 
     # Check the degree input
     degree = checkInput(degree, "degree", int, 0)
+    order = degree + 1  # The order of the Bspline
 
     # Check the parameteric coordinate vector input
     if u is not None:
@@ -125,6 +126,8 @@ def lmsFitCurve(
     # Split the points into con vs. uncon
     S = points[sMask]
     T = points[tMask]
+
+    weights = weights[np.where(weights > 0.0)]
     ns = len(S)
     nt = len(T)
 
@@ -163,24 +166,24 @@ def lmsFitCurve(
     nw = len(weights)  # length of the weights
     W = csr_matrix((weights, np.arange(nw), np.arange(nw + 1)), (nw, nw))
 
-    # Sanity check to make sure the degree is ok
-    if ns + nt + nuds + nudt < degree:
-        degree = ns + nt + nuds + nudt
+    # Sanity check to make sure the order is ok
+    if ns + nt + nuds + nudt < order:
+        order = ns + nt + nuds + nudt
 
     # Compute the knot vector
-    knotVec = computeKnotVectorLMS(degree, u, nCtl)
+    knotVec = computeKnotVecLMS(u, nPts, nCtl, degree)
 
     # Create a matrix to hold the control point coefficients
     ctrlPnts = np.zeros((nCtl, nDim), "d")
 
     # Build the 'N' jacobian
-    nVals = np.zeros((ns + nuds) * degree)
+    nVals = np.zeros((ns + nuds) * order)
     nRowPtr = np.zeros(ns + nuds + 1, "intc")
-    nColInd = np.zeros((ns + nuds) * degree, "intc")
-    libspline.curve_jacobian_wrap(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nRowPtr, nColInd)
+    nColInd = np.zeros((ns + nuds) * order, "intc")
+    libspline.buildcurvecoeffmatrix(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
     N = csr_matrix((nVals, nColInd, nRowPtr), (ns + nuds, nCtl)).tocsc()
 
-    length = libspline.poly_length(points.T)
+    length = libspline.polylength(points.T)
 
     for _i in range(nIter):
         # Update the constrained and unconstrained parametric coordinates
@@ -194,7 +197,7 @@ def lmsFitCurve(
             uds = u[derivPtr][sderivMask]
             udt = u[derivPtr][tderivMask]
 
-        libspline.curve_jacobian_wrap(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
+        libspline.buildcurvecoeffmatrix(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
         NTWN = (N.transpose() * W * N).tocsc()
 
         # Check if we are doing unconstrained LMS
@@ -206,11 +209,11 @@ def lmsFitCurve(
         # More complicated because we have constraints
         # *** Only works with scipy sparse matrices ***
         else:
-            mVals = np.zeros((nt + nudt) * degree)
+            mVals = np.zeros((nt + nudt) * order)
             mRowPtr = np.zeros(nt + nudt + 1, "intc")
-            mColInd = np.zeros((nt + nudt) * degree, "intc")
+            mColInd = np.zeros((nt + nudt) * order, "intc")
 
-            libspline.curve_jacobian_wrap(ut, udt, knotVec, degree, nCtl, mVals, mRowPtr, mColInd)
+            libspline.buildcurvecoeffmatrix(ut, udt, knotVec, degree, nCtl, mVals, mRowPtr, mColInd)
             M = csr_matrix((mVals, mColInd, mRowPtr), (nt + nudt, nCtl))
 
             # Now we must assemble the constrained jacobian
@@ -219,7 +222,7 @@ def lmsFitCurve(
 
             MT = M.transpose().tocsr()
 
-            jVal, jColInd, jRowPtr = libspline.constr_jac(
+            jVal, jColInd, jRowPtr = libspline.buildcurveconjac(
                 NTWN.data,
                 NTWN.indptr,
                 NTWN.indices,
@@ -233,23 +236,23 @@ def lmsFitCurve(
             )
 
             # Create sparse csr matrix and factorize
-            J = csr_matrix((jVal, jColInd, jRowPtr), (nCtl + nt + nudt, nCtl + nt + nudt))
+            J = csr_matrix((jVal, jColInd, jRowPtr), (nCtl + nt + nudt, nCtl + nt + nudt)).tocsc()
             solve = linalg.factorized(J)
             for idim in range(nDim):
                 rhs = np.hstack((N.transpose() * W * S[:, idim], T[:, idim]))
                 ctrlPnts[:, idim] = solve(rhs)[0:nCtl]
 
         # Run the parameteric correction
-        libspline.curve_para_corr(knotVec, degree, u, ctrlPnts.T, length, points.T)
+        # TODO: AL, Fix the parameteric correction in the fortran layer
+        # libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
 
     # Create the BSpline curve
     curve = BSplineCurve(degree, knotVec, ctrlPnts)
-    curve.calcGrevillePoints()
     curve.X = points
     return curve
 
 
-def interpCurveGlobal(
+def curveInterpGlobal(
     points: np.ndarray,
     degree: int,
     deriv: Optional[np.ndarray] = None,
@@ -297,6 +300,9 @@ def interpCurveGlobal(
     # Number of control points
     nPts, nDim = points.shape
 
+    # Calculate the order of the curve
+    order = degree + 1
+
     # Set the ihterpolation weights
     weights = np.ones(nPts)
 
@@ -328,18 +334,19 @@ def interpCurveGlobal(
     nCtl = nPts + nderivPts
 
     # Compute the knot vector
-    knotVec = computeKV1(u, nPts, degree)
+    knotVec = computeKnotVecInterp(u, nPts, degree)
 
-    # Sanity check to make sure the degree is ok
-    if nPts + nderivPts < degree:
-        degree = nPts + nderivPts
+    # Sanity check to make sure the order and degree are ok
+    if nPts + nderivPts < order:
+        order = nPts + nderivPts
+        degree = order - 1
 
     # Build the coefficient matrix for the interpolation linear system
     ctrlPnts = np.zeros((nCtl, nDim), "d")
-    nVals = np.zeros((nPts + nderivPts) * degree)
+    nVals = np.zeros((nPts + nderivPts) * order)
     nRowPtr = np.zeros(nPts + nderivPts + 1, "intc")
-    nColInd = np.zeros((nPts + nderivPts) * degree, "intc")
-    libspline.curve_jacobian_wrap(u, uderiv, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
+    nColInd = np.zeros((nPts + nderivPts) * order, "intc")
+    libspline.buildcurvecoeffmatrix(u, uderiv, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
     N = csr_matrix((nVals, nColInd, nRowPtr), (nPts, nPts)).tocsc()
 
     # Factorize once for efficiency
@@ -349,12 +356,12 @@ def interpCurveGlobal(
 
     # Create the BSplineCurve
     curve = BSplineCurve(degree, knotVec, ctrlPnts)
-    curve.calcGrevillePoints()
     curve.X = points
+
     return curve
 
 
-def lmsFitSurface(
+def surfaceLMSApprox(
     points: np.ndarray,
     nCtlu: int,
     nCtlv: int,
@@ -459,14 +466,16 @@ def lmsFitSurface(
         u, v, U, V = param.paramSurf(points)
 
     # Now we need to calculate the knot vectors for the surface
-    uKnotVec = computeKnotVectorLMS(uDegree, u, nCtlu)
-    vKnotVec = computeKnotVectorLMS(vDegree, v, nCtlv)
+    uKnotVec = computeKnotVecLMS(u, nu, nCtlu, uDegree)
+    vKnotVec = computeKnotVecLMS(v, nv, nCtlv, vDegree)
 
     # Create the control points
     ctrlPnts = np.zeros((nCtlu, nCtlv, nDim))
 
     # Compute the surface
-    vals, rowPtr, colInd = libspline.surface_jacobian_wrap(U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv)
+    vals, rowPtr, colInd = libspline.buildsurfacecoeffmatrix(
+        U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv
+    )
     N = csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv))
     NT = N.transpose()
 
@@ -479,14 +488,13 @@ def lmsFitSurface(
 
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
-    surface.setEdgeCurves()
     surface.X = points
 
     # Return the surface
     return surface
 
 
-def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
+def surfaceInterpGlobal(points: np.ndarray, uDegree: int, vDegree: int):
     """Interpolates a BSpline surface given an array of points and the
     degree of the curves in the u and v directions.
 
@@ -532,15 +540,17 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
     u, v, U, V = param.paramSurf(points)
 
     # Compute the knot vectors
-    uKnotVec = computeKnotVectorInterp(uDegree, np.array([], "d"), u)
-    vKnotVec = computeKnotVectorInterp(vDegree, np.array([], "d"), v)
+    uKnotVec = computeKnotVecInterp(u, nu, uDegree)
+    vKnotVec = computeKnotVecInterp(v, nv, vDegree)
 
     # Initialize the control points
     ctrlPnts = np.zeros((nCtlu, nCtlv, nDim))
 
     # Compute the surface
-    vals, rowPtr, colInd = libspline.surface_jacobian_wrap(U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv)
-    N = csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv))
+    vals, rowPtr, colInd = libspline.buildsurfacecoeffmatrix(
+        U.T, V.T, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv
+    )
+    N = csr_matrix((vals, colInd, rowPtr), (nu * nv, nCtlu * nCtlv)).tocsc()
 
     # Factorize and solve the sparse linear system to get the control
     # point vector
@@ -550,30 +560,47 @@ def interpSurface(points: np.ndarray, uDegree: int, vDegree: int):
 
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
-    surface.setEdgeCurves()
     surface.X = points
 
     # Return the surface
     return surface
 
 
-def computeKV1(u: np.ndarray, nPts: int, degree: int) -> np.ndarray:
+def computeKnotVecInterp(u: np.ndarray, nPts: int, degree: int) -> np.ndarray:
+    """Generate a knot vector suitible for global curve interpolation using averaging.
+
+    This is an implementation of Eq. 9.8 from The NURBS Book by Piegl and Tiller, pg. 365
+    Parameters
+    ----------
+    u : np.ndarray
+        The parameteric coordinate vector.
+    nPts : int
+        The number of points.
+    degree : int
+        The degree of the curve.
+
+    Returns
+    -------
+    np.ndarray
+        The knot vector.
+    """
     knotVec = np.zeros(nPts + degree + 1)
 
-    for j in range(1, nPts - degree - 1):
-        knotVec[j + degree] = np.sum(u[j : j + degree - 1]) / degree
+    for j in range(1, nPts - degree + 1):
+        knotVec[j + degree] = np.sum(u[j : j + degree]) / degree
 
     knotVec[-(degree + 1) :] = 1.0
 
     return knotVec
 
 
-def computeKV2(u: np.ndarray, nPts: int, nCtl: int, degree: int) -> np.ndarray:
+def computeKnotVecLMS(u: np.ndarray, nPts: int, nCtl: int, degree: int) -> np.ndarray:
+    n = nCtl - 1
     knotVec = np.zeros(nCtl + degree + 1)
 
-    d = nPts / (nCtl - degree)
+    d = (nPts + 1) / (n - degree + 1)
 
-    for j in range(1, nPts - degree):
+    for j in range(1, n - degree + 1):
         i = int(j * d)
         alpha = (j * d) - i
         knotVec[j + degree] = ((1.0 - alpha) * u[i - 1]) + (alpha * u[i])

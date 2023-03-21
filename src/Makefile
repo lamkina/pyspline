@@ -21,6 +21,8 @@ OBJS =  basis.o\
 	evalSurface.o\
 	multiplicity.o\
 	binomialCoeff.o\
+	curveFitting.o\
+	surfaceFitting.o\
 
 default:
 	$(MAKE) $(MODS)

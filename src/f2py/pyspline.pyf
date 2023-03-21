@@ -149,6 +149,75 @@ python module libspline ! in
             integer, required,intent(in) :: degree
             integer intent(out) :: mult
         end subroutine multiplicity
+        subroutine buildcurvecoeffmatrix(u,ud,knotvec,degree,nctl,n,nd,vals,row_ptr,col_ind) ! in :libspline:curveFitting.f90
+            use precision
+            real(kind=realtype) dimension(n),intent(in) :: u
+            real(kind=realtype) dimension(nd),intent(in) :: ud
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            integer, required,intent(in) :: degree
+            integer, required,intent(in) :: nctl
+            integer, optional,intent(in),check(shape(u, 0) == n),depend(u) :: n=shape(u, 0)
+            integer, optional,intent(in),check(shape(ud, 0) == nd),depend(ud) :: nd=shape(ud, 0)
+            real(kind=realtype) dimension(n + nd + degree * n + degree * nd),intent(inout),check(shape(vals, 0) == n + nd + degree * n + degree * nd),depend(n,nd,degree) :: vals
+            integer dimension(1 + n + nd),intent(inout),depend(n,nd) :: row_ptr
+            integer dimension(n + nd + degree * n + degree * nd),intent(inout),check(shape(col_ind, 0) == n + nd + degree * n + degree * nd),depend(n,nd,degree) :: col_ind
+        end subroutine buildcurvecoeffmatrix
+        subroutine polylength(x,n,ndim,length) ! in :libspline:curveFitting.f90
+            use precision
+            real(kind=realtype) dimension(ndim,n),intent(in) :: x
+            integer, optional,intent(in),check(shape(x, 1) == n),depend(x) :: n=shape(x, 1)
+            integer, optional,intent(in),check(shape(x, 0) == ndim),depend(x) :: ndim=shape(x, 0)
+            real(kind=realtype) intent(out) :: length
+        end subroutine polylength
+        subroutine buildcurveconjac(aval,arowptr,acolind,bval,browptr,bcolind,cval,crowptr,ccolind,am,an,cm,annz,bnnz,cnnz,jval,jcolind,jrowptr) ! in :libspline:curveFitting.f90
+            use precision
+            real(kind=realtype) dimension(annz),intent(in) :: aval
+            integer dimension(1 + am),intent(in) :: arowptr
+            integer dimension(annz),intent(in),depend(annz) :: acolind
+            real(kind=realtype) dimension(bnnz),intent(in) :: bval
+            integer dimension(1 + am),intent(in),depend(am) :: browptr
+            integer dimension(bnnz),intent(in),depend(bnnz) :: bcolind
+            real(kind=realtype) dimension(cnnz),intent(in) :: cval
+            integer dimension(1 + cm),intent(in) :: crowptr
+            integer dimension(cnnz),intent(in),depend(cnnz) :: ccolind
+            integer, optional,intent(in),check(shape(arowptr, 0) == 1 + am),depend(arowptr) :: am=-1 + shape(arowptr, 0)
+            integer intent(in) :: an
+            integer, optional,intent(in),check(shape(crowptr, 0) == 1 + cm),depend(crowptr) :: cm=-1 + shape(crowptr, 0)
+            integer, optional,intent(in),check(shape(aval, 0) == annz),depend(aval) :: annz=shape(aval, 0)
+            integer, optional,intent(in),check(shape(bval, 0) == bnnz),depend(bval) :: bnnz=shape(bval, 0)
+            integer, optional,intent(in),check(shape(cval, 0) == cnnz),depend(cval) :: cnnz=shape(cval, 0)
+            real(kind=realtype) dimension(annz + bnnz + cnnz),intent(out),depend(annz,bnnz,cnnz) :: jval
+            integer dimension(annz + bnnz + cnnz),intent(out),depend(annz,bnnz,cnnz) :: jcolind
+            integer dimension(1 + am + cm),intent(out),depend(am,cm) :: jrowptr
+        end subroutine buildcurveconjac
+        subroutine curveparamcorr(knotvec,degree,u,coef,nctl,ndim,length,n,x) ! in :libspline:curveFitting.f90
+            use precision
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(n),intent(inout) :: u
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: coef
+            integer, optional,intent(in),check(shape(coef, 1) == nctl),depend(coef) :: nctl=shape(coef, 1)
+            integer, optional,intent(in),check(shape(coef, 0) == ndim),depend(coef) :: ndim=shape(coef, 0)
+            real(kind=realtype) intent(in) :: length
+            integer, optional,intent(in),check(shape(u, 0) == n),depend(u) :: n=shape(u, 0)
+            real(kind=realtype) dimension(ndim,n),intent(in),depend(ndim,n) :: x
+        end subroutine curveparamcorr
+        subroutine buildsurfacecoeffmatrix(u,v,uknotvec,vknotvec,udegree,vdegree,nctlu,nctlv,nu,nv,vals,rowptr,colind) ! in :libspline:surfaceFitting.f90
+            use precision
+            real(kind=realtype) dimension(nv,nu),intent(in) :: u
+            real(kind=realtype) dimension(nv,nu),intent(in),depend(nu,nv) :: v
+            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(udegree,nctlu) :: uknotvec
+            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(vdegree,nctlv) :: vknotvec
+            integer, required,intent(in) :: udegree
+            integer, required,intent(in) :: vdegree
+            integer, required,intent(in) :: nctlu
+            integer, required,intent(in) :: nctlv
+            integer, optional,intent(in),check(shape(u, 1) == nu),depend(u) :: nu=shape(u, 1)
+            integer, optional,intent(in),check(shape(u, 0) == nv),depend(u) :: nv=shape(u, 0)
+            real(kind=realtype) dimension(nu * nv + nu * nv * udegree + nu * nv * udegree * vdegree + nu * nv * vdegree),intent(out),depend(nu,udegree,nv,vdegree) :: vals
+            integer dimension(1 + nu * nv),intent(out),depend(nu,nv) :: rowptr
+            integer dimension(nu * nv + nu * nv * udegree + nu * nv * udegree * vdegree + nu * nv * vdegree),intent(out),depend(nu,udegree,nv,vdegree) :: colind
+        end subroutine buildsurfacecoeffmatrix
     end interface 
 end python module libspline
 

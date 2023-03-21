@@ -21,6 +21,7 @@ class TestOperations(unittest.TestCase):
         degree = 3
         ctrlPnts = np.array([[0.0, 0.0], [1.0, 1.0], [1.5, 1.5], [2.0, 4.0], [3.0, 4.0], [3.5, 3.0], [4.0, 1.0]])
         self.bSplineCurve = BSplineCurve(degree, knotVec, ctrlPnts)
+        self.bSplineCurve.computeData()
 
         # Create a nurbs curve
         knotVec = np.array([0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0])
@@ -39,6 +40,7 @@ class TestOperations(unittest.TestCase):
             ]
         )
         self.nurbsCurve = NURBSCurve(degree, knotVec, ctrlPntsW)
+        self.nurbsCurve.computeData()
 
         # Create a bspline surface
         uKnotVec = np.array([0, 0, 0, 1 / 2, 1, 1, 1])
@@ -60,6 +62,7 @@ class TestOperations(unittest.TestCase):
         ctrlPnts[3, 2] = np.array([9, 4, 0])
 
         self.bSplineSurf = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
+        self.bSplineCurve.computeData()
 
         # Create a nurbs surface
         uKnotVec = np.array([0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0])
@@ -110,8 +113,9 @@ class TestOperations(unittest.TestCase):
         )
 
         self.nurbsSurf = NURBSSurface(uDegree, vDegree, ctrlPntsW, uKnotVec, vKnotVec)
+        self.nurbsSurf.computeData()
 
-    def testDecomposeCurve(self):
+    def testDecomposeCurveBSpline(self):
         newCurves = operations.decomposeCurve(self.bSplineCurve)
         self.assertEqual(len(newCurves), 4)
         for curve in newCurves:
@@ -120,6 +124,7 @@ class TestOperations(unittest.TestCase):
             self.assertTrue(isinstance(curve, BSplineCurve))
             self.assertFalse(curve.rational)
 
+    def testDecomposeCurveNURBS(self):
         newCurves = operations.decomposeCurve(self.nurbsCurve)
         self.assertEqual(len(newCurves), 4)
         for curve in newCurves:
@@ -128,7 +133,7 @@ class TestOperations(unittest.TestCase):
             self.assertTrue(isinstance(curve, NURBSCurve))
             self.assertTrue(curve.rational)
 
-    def testCombineCurves(self):
+    def testCombineCurvesBSpline(self):
         # Create 4 decomposed bezier line segments from a BSpline
         curveList = []
         for i in range(4):
@@ -141,6 +146,7 @@ class TestOperations(unittest.TestCase):
         assert_allclose(weights, np.ones(len(ctrlPnts)))  # Test the weights get the correct default values
         assert_allclose(knots, np.array([1, 2, 3]))  # Test the internal knot generation
 
+    def testCombineCurvesNURBS(self):
         # Create 4 decomposed bezier line segments from a nurbs circle
         curveList = []
         for i in range(0, 7, 2):
@@ -154,93 +160,134 @@ class TestOperations(unittest.TestCase):
         assert_allclose(weights, self.nurbsCurve.weights)
         assert_allclose(knots, np.array([1, 2, 3]))
 
-    def testElevateDegreeCurve(self):
+    def testElevateDegreeCurveBSpline(self):
         curve = deepcopy(self.bSplineCurve)  # copy curve so we dont change the original
+
+        # Create a parameteric coord array for testing
+        u = np.linspace(0, 1, 100)
 
         # Elevate degree by 1
         operations.elevateDegree(curve, [1])
         self.assertEqual(curve.degree, 4)
+        assert_allclose(curve(u), self.bSplineCurve(u))  # Make sure curves are EXACTLY the same after degree elevation
 
         # Test multi-degree elevation
         operations.elevateDegree(curve, [2])
         self.assertEqual(curve.degree, 6)
+        assert_allclose(curve(u), self.bSplineCurve(u))  # Make sure curves are EXACTLY the same after degree elevation
 
+    def testElevateDegreeCurveNURBS(self):
         curve = deepcopy(self.nurbsCurve)  # copy curve so we dont change the original
+
+        # Create a parameteric coord array for testing
+        u = np.linspace(0, 1, 100)
 
         # Elevate degree by 1
         operations.elevateDegree(curve, [1])
         self.assertEqual(curve.degree, 3)
 
-        writeTecplot(curve, "/home/mdolabuser/shared/repos/pyloft/pyloft/OUTPUT/nurbs_elev_curve.dat")
-        print("Degree 3")
-        print(np.linalg.norm(curve.data - np.array([0.0, 0.0, 0.0]), axis=1))
+        # Test that the radius is exactly 1.0 at all points after degree elevation
+        radius = np.linalg.norm(curve(u) - np.array([0.0, 0.0, 0.0]), axis=1)
+        assert_allclose(radius, 1.0, atol=1e-8)
+        assert_allclose(curve(u), self.nurbsCurve(u))  # Make sure curves are EXACTLY the same after degree elevation
 
         # Test multi-degree elevation
         operations.elevateDegree(curve, [2])
         self.assertEqual(curve.degree, 5)
 
-    def testElevateDegreeSurface(self):
-        pass
+        # Test that the radius is exactly 1.0 at all points after degree elevation
+        radius = np.linalg.norm(curve(u) - np.array([0.0, 0.0, 0.0]), axis=1)
+        assert_allclose(radius, 1.0, atol=1e-8)
+        assert_allclose(curve(u), self.nurbsCurve(u))  # Make sure curves are EXACTLY the same after degree elevation
 
-    def testElevateDegreeVolume(self):
-        pass
+    # def testElevateDegreeSurface(self):
+    #     pass
 
-    # def testReduceDegreeCurve(self):
-    #     # Test degree reduction for BSplines
-    #     knotVec = np.array(
-    #         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    #     )
-    #     ctrlPnts = np.array(
-    #         [
-    #             [0.0, 0.0],
-    #             [0.5, 0.5],
-    #             [0.775, 0.775],
-    #             [0.9395833333333334, 0.9729166666666667],
-    #             [1.0695601851851853, 1.1839120370370373],
-    #             [1.7347222222222223, 2.5819444444444444],
-    #             [1.866666666666667, 2.847685185185185],
-    #             [2.576388888888889, 3.5875],
-    #             [2.7391203703703697, 3.575],
-    #             [3.4833333333333334, 2.8625],
-    #             [3.6, 2.5500000000000003],
-    #             [3.75, 1.9999999999999998],
-    #             [4.0, 1.0],
-    #         ]
-    #     )
-    #     curve = BSplineCurve(6, knotVec, ctrlPnts)
-    #     operations.reduceDegree(curve, [1])
-    #     self.assertEqual(curve.degree, 5)
+    # def testElevateDegreeVolume(self):
+    #     pass
 
-    #     # Test degree reduction for NURBS
-    #     knotVec = np.array([0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0, 1.0])
-    #     ctrlPntsW = np.array(
-    #         [
-    #             [1.0, 0.0, 0.0, 1.0],
-    #             [0.804737854124365, 0.47140452079103173, 0.0, 0.804737854124365],
-    #             [0.47140452079103173, 0.804737854124365, 0.0, 0.804737854124365],
-    #             [-0.47140452079103173, 0.804737854124365, 0.0, 0.804737854124365],
-    #             [-0.804737854124365, 0.47140452079103173, 0.0, 0.804737854124365],
-    #             [-0.804737854124365, -0.47140452079103173, 0.0, 0.804737854124365],
-    #             [-0.47140452079103173, -0.804737854124365, 0.0, 0.804737854124365],
-    #             [0.47140452079103173, -0.804737854124365, 0.0, 0.804737854124365],
-    #             [0.804737854124365, -0.47140452079103173, 0.0, 0.804737854124365],
-    #             [1.0, 0.0, 0.0, 1.0],
-    #         ]
-    #     )
-    #     curve = NURBSCurve(3, knotVec, ctrlPntsW)
-    #     curve.computeData()
-    #     print(np.linalg.norm(curve.data - np.array([0.0, 0.0, 0.0]), axis=1))
-    #     operations.reduceDegree(curve, [1])
-    #     self.assertEqual(curve.degree, 2)
-    #     # writeTecplot(curve, "/home/mdolabuser/shared/pyLoft/pyloft/OUTPUT/testnurbscurve.dat")
-    #     print(curve.knotVec)
-    #     print(curve.ctrlPntsW)
-    #     print(curve.ctrlPnts)
-    #     print(np.linalg.norm(curve.data - np.array([0.0, 0.0, 0.0]), axis=1))
+    def testReduceDegreeCurveBSpline(self):
+        u = np.linspace(0, 1, 100)
 
-    #     self.nurbsCurve.computeData()
-    #     print(np.linalg.norm(self.nurbsCurve.data - np.array([0.0, 0.0, 0.0]), axis=1))
-    #     # writeTecplot(self.nurbsCurve, "/home/mdolabuser/shared/pyLoft/pyloft/OUTPUT/testnurbscircle.dat")
+        knotVec = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0, 1.0, 1.0])
+
+        ctrlPnts = np.array(
+            [
+                [0.0, 0.0],
+                [0.75, 0.75],
+                [1.125, 1.125],
+                [1.4791666666666665, 1.645833333333333],
+                [1.75, 2.75],
+                [2.041666666666667, 3.791666666666666],
+                [2.5, 4.0],
+                [2.979166666666667, 3.875],
+                [3.375, 3.25],
+                [3.625, 2.5],
+                [4.0, 1.0],
+            ]
+        )
+
+        curveOrig = BSplineCurve(4, knotVec, ctrlPnts)
+        curveNew = deepcopy(curveOrig)
+        operations.reduceDegree(curveNew, [1])
+        self.assertEqual(curveNew.degree, 3)
+        assert_allclose(curveNew(u), curveOrig(u))
+
+    def testReduceDegreeCurveNurbs(self):
+        u = np.linspace(0, 1, 100)
+        # Test degree reduction for NURBS
+        knotVec = np.array(
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+            ]
+        )
+        ctrlPntsW = np.array(
+            [
+                [1.0, 0.0, 0.0, 1.0],
+                [0.8535533905932737, 0.35355339059327373, 0.0, 0.8535533905932737],
+                [0.6380711874576983, 0.6380711874576983, 0.0, 0.804737854124365],
+                [0.35355339059327373, 0.8535533905932737, 0.0, 0.8535533905932737],
+                [0.0, 1.0, 0.0, 1.0],
+                [-0.35355339059327373, 0.8535533905932737, 0.0, 0.8535533905932737],
+                [-0.6380711874576983, 0.6380711874576983, 0.0, 0.804737854124365],
+                [-0.8535533905932737, 0.35355339059327373, 0.0, 0.8535533905932737],
+                [-1.0, 0.0, 0.0, 1.0],
+                [-0.8535533905932737, -0.35355339059327373, 0.0, 0.8535533905932737],
+                [-0.6380711874576983, -0.6380711874576983, 0.0, 0.804737854124365],
+                [-0.35355339059327373, -0.8535533905932737, 0.0, 0.8535533905932737],
+                [0.0, -1.0, 0.0, 1.0],
+                [0.35355339059327373, -0.8535533905932737, 0.0, 0.8535533905932737],
+                [0.6380711874576983, -0.6380711874576983, 0.0, 0.804737854124365],
+                [0.8535533905932737, -0.35355339059327373, 0.0, 0.8535533905932737],
+                [1.0, 0.0, 0.0, 1.0],
+            ]
+        )
+        curveOrig = NURBSCurve(4, knotVec, ctrlPntsW)
+        curveNew = deepcopy(curveOrig)
+        operations.reduceDegree(curveNew, [1])
+        self.assertEqual(curveNew.degree, 3)
+        assert_allclose(curveNew(u), curveOrig(u))
 
     # def testReduceDegreeSurface(self):
     #     pass
