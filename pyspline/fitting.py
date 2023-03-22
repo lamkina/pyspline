@@ -16,7 +16,8 @@ def curveLMSApprox(
     points: np.ndarray,
     degree: int,
     nCtl: int,
-    nIter: int = 1,
+    maxIter: int = 1,
+    tol: float = 0.01,
     u: Optional[np.ndarray] = None,
     weights: Optional[np.ndarray] = None,
     deriv: Optional[np.ndarray] = None,
@@ -35,9 +36,14 @@ def curveLMSApprox(
     degree : int
         The degree of the B-spline curve to fit.
     nCtl : int
-        The number of control points to use in the fitted curve.
-    nIter : int, optional
+        The number of control points to use in the fitted curve.  If maxIter > 1, this will be incremented
+        to each iteration until the rms error of the fitted curve is below the tolerance or until the maxIter
+        limit is reached.
+    maxIter : int, optional
         The number of iterations to use in the fitting process. Default is 1.
+    tol : float, optional
+        The tolerance of the LMS fitting process. Tighter tolerances generally mean more control points
+        are necessary to reduce the rms error.
     u : np.ndarray, optional
         The parametric coordinates to use for the input points. If not provided, the coordinates are
         computed automatically.
@@ -170,22 +176,23 @@ def curveLMSApprox(
     if ns + nt + nuds + nudt < order:
         order = ns + nt + nuds + nudt
 
-    # Compute the knot vector
-    knotVec = computeKnotVecLMS(u, nPts, nCtl, degree)
+    currIter = 0
+    while True:
+        # Compute the knot vector
+        knotVec = computeKnotVecLMS(u, nPts, nCtl, degree)
 
-    # Create a matrix to hold the control point coefficients
-    ctrlPnts = np.zeros((nCtl, nDim), "d")
+        # Create a matrix to hold the control point coefficients
+        ctrlPnts = np.zeros((nCtl, nDim), "d")
 
-    # Build the 'N' jacobian
-    nVals = np.zeros((ns + nuds) * order)
-    nRowPtr = np.zeros(ns + nuds + 1, "intc")
-    nColInd = np.zeros((ns + nuds) * order, "intc")
-    libspline.buildcurvecoeffmatrix(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
-    N = csr_matrix((nVals, nColInd, nRowPtr), (ns + nuds, nCtl)).tocsc()
+        # Build the 'N' jacobian
+        nVals = np.zeros((ns + nuds) * order)
+        nRowPtr = np.zeros(ns + nuds + 1, "intc")
+        nColInd = np.zeros((ns + nuds) * order, "intc")
+        libspline.buildcurvecoeffmatrix(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
+        N = csr_matrix((nVals, nColInd, nRowPtr), (ns + nuds, nCtl)).tocsc()
 
-    length = libspline.polylength(points.T)
+        length = libspline.polylength(points.T)
 
-    for _i in range(nIter):
         # Update the constrained and unconstrained parametric coordinates
         # based on the interpolation weights
         us = u[sMask]
@@ -243,12 +250,29 @@ def curveLMSApprox(
                 ctrlPnts[:, idim] = solve(rhs)[0:nCtl]
 
         # Run the parameteric correction
-        # TODO: AL, Fix the parameteric correction in the fortran layer
-        # libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
+        libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
+
+        err = 0.0
+        for idim in range(nDim):
+            err += np.linalg.norm(N * ctrlPnts[:, idim] - S[:, idim]) ** 2
+        err = np.sqrt(err / nPts)
+
+        currIter += 1
+
+        print(f"Iteration: {currIter:03d} | RMS error: {err:.4e} | Nctl: {nCtl}")
+
+        if err <= tol or currIter >= maxIter:
+            print(
+                f"Fitting converged in {currIter} iterations with final RMS Error={err:.4%} and {nCtl} control points."
+            )
+            break
+        else:
+            nCtl += 1
 
     # Create the BSpline curve
     curve = BSplineCurve(degree, knotVec, ctrlPnts)
     curve.X = points
+
     return curve
 
 
@@ -485,6 +509,9 @@ def surfaceLMSApprox(
     for idim in range(nDim):
         rhs = NT * points[:, :, idim].flatten()
         ctrlPnts[:, :, idim] = solve(rhs).reshape((nCtlu, nCtlv))
+
+    rms = libspline.surfaceparamcorr(uKnotVec, vKnotVec, uDegree, vDegree, U.T, V.T, ctrlPnts.T, points.T)
+    print(f"{rms:.4e}")
 
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)

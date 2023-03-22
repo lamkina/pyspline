@@ -132,17 +132,22 @@ subroutine curveParamCorr(knotVec, degree, u, coef, nCtl, nDim, length, n, X)
     ! Working
     integer :: i, j, k, maxInnerIter
     real(kind=realType) :: D(nDim), D2(nDim)
-    real(kind=realType) :: val(nDim), deriv(nDim)
+    ! "deriv" has second dimension = 2 because derivEvalCurve returns the
+    ! evaluation of the curve in the first column, and then the first derivative
+    ! in the second column.
+    real(kind=realType) :: val(nDim), deriv(nDim, 2)
     real(kind=realType) :: c, sTilde
 
     k = degree + 1 ! Set the order of the spline
     maxInnerIter = 10
-    do i = 1, n - 2
+    do i = 2, n - 1
         call evalCurve(u(i), knotVec, degree, coef, nCtl, nDim, 1, val)
         call derivEvalCurve(u(i), knotVec, degree, coef, 1, nCtl, nDim, deriv)
 
         D = X(:, i) - val
-        c = dot_product(D, deriv) / NORM2(deriv)
+
+        ! Be sure to use the second column of deriv to get the first derivative
+        c = dot_product(D, deriv(:, 2)) / NORM2(deriv(:, 2))
 
         inner_loop: do j = 1, maxInnerIter
 
@@ -160,29 +165,29 @@ subroutine curveParamCorr(knotVec, degree, u, coef, nCtl, nDim, length, n, X)
 
 end subroutine curveParamCorr
 
-function compute_rms_curve(t, k, s, coef, nctl, ndim, n, X)
+function computeRMSCurve(knotVec, degree, u, P, nCtl, nDim, n, X)
     ! Compute the rms
     use precision
     implicit none
     ! Input/Output
-    integer, intent(in) :: k, nctl, ndim, n
-    real(kind=realType), intent(in) :: t(k + nctl)
-    real(kind=realType), intent(in) :: s(n)
-    real(kind=realType), intent(in) :: coef(ndim, nctl)
-    real(kind=realType), intent(in) :: X(ndim, n)
-    real(kind=realType) :: compute_rms_curve
+    integer, intent(in) :: degree, nCtl, nDim, n
+    real(kind=realType), intent(in) :: knotVec(degree + nCtl + 1)
+    real(kind=realType), intent(in) :: u(n)
+    real(kind=realType), intent(in) :: P(nDim, nCtl)
+    real(kind=realType), intent(in) :: X(nDim, n)
+    real(kind=realType) :: computeRMSCurve
 
     ! Working
     integer :: i, idim
-    real(kind=realType) :: val(ndim), D(ndim)
+    real(kind=realType) :: val(nDim), D(nDim)
 
-    compute_rms_curve = 0.0
+    computeRMSCurve = 0.0
     do i = 1, n
-        call evalCurve(s(i), t, k-1, coef, nctl, ndim, 1, val)
+        call evalCurve(u(i), knotVec, degree, P, nCtl, nDim, 1, val)
         D = val - X(:, i)
-        do idim = 1, ndim
-            compute_rms_curve = compute_rms_curve + D(idim)**2
+        do idim = 1, nDim
+            computeRMSCurve = computeRMSCurve + D(idim)**2
         end do
     end do
-    compute_rms_curve = sqrt(compute_rms_curve / n)
-end function compute_rms_curve
+    computeRMSCurve = sqrt(computeRMSCurve / n)
+end function computeRMSCurve

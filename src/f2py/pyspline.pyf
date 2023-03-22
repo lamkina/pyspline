@@ -218,7 +218,24 @@ python module libspline ! in
             integer dimension(1 + nu * nv),intent(out),depend(nu,nv) :: rowptr
             integer dimension(nu * nv + nu * nv * udegree + nu * nv * udegree * vdegree + nu * nv * vdegree),intent(out),depend(nu,udegree,nv,vdegree) :: colind
         end subroutine buildsurfacecoeffmatrix
-    end interface 
+        subroutine surfaceparamcorr(uknotvec,vknotvec,udegree,vdegree,u,v,p,nctlu,nctlv,ndim,nu,nv,x,rms) ! in :libspline:surfaceFitting.f90
+            use precision
+            real(kind=realtype) dimension(1 + nctlu + udegree),intent(in),check(shape(uknotvec, 0) == 1 + nctlu + udegree,shape(uknotvec, 0) == 1 + nctlu + udegree),depend(nctlu,udegree) :: uknotvec
+            real(kind=realtype) dimension(1 + nctlv + vdegree),intent(in),check(shape(vknotvec, 0) == 1 + nctlv + vdegree,shape(vknotvec, 0) == 1 + nctlv + vdegree),depend(nctlv,vdegree) :: vknotvec
+            integer, required,intent(in) :: udegree
+            integer, required,intent(in) :: vdegree
+            real(kind=realtype) dimension(nv,nu),intent(inout) :: u
+            real(kind=realtype) dimension(nv,nu),intent(inout),depend(nu,nv) :: v
+            real(kind=realtype) dimension(ndim,nctlv,nctlu),intent(in) :: p
+            integer, optional,intent(in),check(shape(p, 2) == nctlu),depend(p) :: nctlu=shape(p, 2)
+            integer, optional,intent(in),check(shape(p, 1) == nctlv),depend(p) :: nctlv=shape(p, 1)
+            integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
+            integer, optional,intent(in),check(shape(u, 1) == nu),depend(u) :: nu=shape(u, 1)
+            integer, optional,intent(in),check(shape(u, 0) == nv),depend(u) :: nv=shape(u, 0)
+            real(kind=realtype) dimension(ndim,nv,nu),intent(in),depend(nu,nv,ndim) :: x
+            real(kind=realtype) intent(out) :: rms
+        end subroutine surfaceparamcorr
+    end interface
 end python module libspline
 
 ! This file was auto-generated with f2py (version:1.24.2).
