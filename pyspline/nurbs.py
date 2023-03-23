@@ -31,6 +31,10 @@ class NURBSCurve(BSplineCurve):
         self._ctrlPntsW = val
 
     @property
+    def nDim(self) -> int:
+        return self.ctrlPntsW.shape[1]
+
+    @property
     def ctrlPnts(self) -> np.ndarray:
         ctrlPnts, _ = separateCtrlPnts(self.ctrlPntsW)
         return ctrlPnts
@@ -103,11 +107,11 @@ class NURBSSurface(BSplineSurface):
     ) -> None:
         # Initialize the NURBS specific attributes
         self.ctrlPntsW = ctrlPntsW
-        self._rational = True
 
         # Initialize the baseclass BSpline object
         super(NURBSSurface, self).__init__(uDegree, vDegree, self.ctrlPnts, uKnotVec, vKnotVec)
 
+        self._rational = True
         self.edgeCurves: List[NURBSCurve] = [None, None, None, None]
         self.setEdgeCurves()
 

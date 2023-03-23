@@ -13,6 +13,23 @@ from .nurbs import NURBSCurve, NURBSSurface
 from .utils import checkInput
 
 
+def mergeKnotVecs(curves: List[CURVETYPE]) -> None:
+    knotVecList = [curve.knotVec[curve.degree + 1 : -(curve.degree + 1)] for curve in curves]
+    uniqueKnots = np.unique(np.concatenate(knotVecList))
+
+    for knot in uniqueKnots:
+        mult = []
+        for curve in curves:
+            s = utils.multiplicity(knot, curve.knotVec, curve.nCtl, curve.degree)
+            mult.append(s)
+
+        maxMult = max(mult)
+        for i, curve in enumerate(curves):
+            num = maxMult - mult[i]
+            if num > 0:
+                insertKnot(curve, [knot], num)
+
+
 def decomposeCurve(curve: CURVETYPE) -> List[CURVETYPE]:
     """Decompose the curve into Bezier segments of the same degree.
 

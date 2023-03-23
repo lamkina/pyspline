@@ -58,7 +58,7 @@ class BSplineCurve(Spline):
             )
 
         if not np.all(knotVec[:-1] <= knotVec[1:]):
-            raise ValueError(f"Knot vector is not in ascending order.")
+            raise ValueError("Knot vector is not in ascending order.")
 
         self._knotVec = knotVec
 
@@ -178,7 +178,7 @@ class BSplineSurface(Spline):
     @uKnotVec.setter
     def uKnotVec(self, uKnotVec: np.ndarray) -> None:
         if not np.all(uKnotVec[:-1] <= uKnotVec[1:]):
-            raise ValueError(f"Knot vector is not in ascending order.")
+            raise ValueError("Knot vector is not in ascending order.")
 
         if len(uKnotVec) != (self.nCtlu + self.uDegree + 1):
             raise ValueError(
@@ -196,7 +196,7 @@ class BSplineSurface(Spline):
     @vKnotVec.setter
     def vKnotVec(self, vKnotVec: np.ndarray) -> None:
         if not np.all(vKnotVec[:-1] <= vKnotVec[1:]):
-            raise ValueError(f"Knot vector is not in ascending order.")
+            raise ValueError("Knot vector is not in ascending order.")
 
         if len(vKnotVec) != (self.nCtlv + self.vDegree + 1):
             raise ValueError(
