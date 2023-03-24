@@ -163,7 +163,7 @@ def elevateDegree(geo: GEOTYPE, param: Union[List, np.ndarray, Tuple]) -> None:
 
             num = geo.degree + 1
 
-        # Combine the Bezier curve segments back into a full
+        # Combine the Bezier curve segments back into a full b-spline
         knotVec, ctrlPnts, weights, knotList = combineCurves(curveList, check=False)
 
         # Set the control points depending on rational/non-rational curve
@@ -181,6 +181,93 @@ def elevateDegree(geo: GEOTYPE, param: Union[List, np.ndarray, Tuple]) -> None:
             geo.ctrlPnts = ctrlPnts
 
         geo.knotVec = knotVec
+
+    elif isinstance(geo, BSplineSurface):
+        # Elevate the u-direction
+        if param[0] > 0:
+            internalKnots = np.unique(geo.uKnotVec[geo.uDegree + 1 : -(geo.uDegree + 1)])
+            multList = []
+            for intKnot in internalKnots:
+                s = utils.multiplicity(intKnot, geo.uKnotVec, geo.nCtlu, geo.uDegree)
+                multList.append(s)
+
+            isoCurves: List[CURVETYPE] = []
+            for v in range(geo.nCtlv):
+                # Create the isoparametric curve for this column of control points
+                vCurve = (
+                    NURBSCurve(geo.uDegree, geo.uKnotVec, geo.ctrlPntsW[:, v])
+                    if geo.rational
+                    else BSplineCurve(geo.uDegree, deepcopy(geo.uKnotVec), deepcopy(geo.ctrlPnts[:, v]))
+                )
+
+                # Elevate the degree of the iso curve
+                elevateDegree(vCurve, [param[0]])
+
+                isoCurves.append(vCurve)
+
+            # Allocate new control points
+            newCtrlPnts = np.zeros((isoCurves[0].nCtl, geo.nCtlv, geo.nDim))
+
+            # Set the new control points
+            for v in range(geo.nCtlv):
+                if geo.rational:
+                    newCtrlPnts[:, v] = isoCurves[v].ctrlPntsW
+                else:
+                    newCtrlPnts[:, v] = isoCurves[v].ctrlPnts
+
+            # Update the surface
+            geo.uDegree = geo.uDegree + param[0]
+
+            if geo.rational:
+                geo.ctrlPntsW = newCtrlPnts
+            else:
+                geo.ctrlPnts = newCtrlPnts
+
+            geo.uKnotVec = isoCurves[0].knotVec  # All the knot vecs will be the same
+
+        if param[1] > 0:
+            internalKnots = np.unique(geo.vKnotVec[geo.vDegree + 1 : -(geo.vDegree + 1)])
+            multList = []
+            for intKnot in internalKnots:
+                s = utils.multiplicity(intKnot, geo.vKnotVec, geo.nCtlv, geo.vDegree)
+                multList.append(s)
+
+            isoCurves: List[CURVETYPE] = []
+            for u in range(geo.nCtlu):
+                # Create the isoparametric curve for this column of control points
+                vCurve = (
+                    NURBSCurve(geo.vDegree, geo.vKnotVec, geo.ctrlPntsW[u, :])
+                    if geo.rational
+                    else BSplineCurve(geo.vDegree, deepcopy(geo.vKnotVec), deepcopy(geo.ctrlPnts[u, :]))
+                )
+
+                # Elevate the degree of the iso curve
+                elevateDegree(vCurve, [param[1]])
+
+                isoCurves.append(vCurve)
+
+            # Allocate new control points
+            newCtrlPnts = np.zeros((geo.nCtlu, isoCurves[0].nCtl, geo.nDim))
+
+            # Set the new control points
+            for u in range(geo.nCtlu):
+                if geo.rational:
+                    newCtrlPnts[u, :] = isoCurves[u].ctrlPntsW
+                else:
+                    newCtrlPnts[u, :] = isoCurves[u].ctrlPnts
+
+            # Update the surface
+            geo.vDegree = geo.vDegree + param[1]
+
+            if geo.rational:
+                geo.ctrlPntsW = newCtrlPnts
+            else:
+                geo.ctrlPnts = newCtrlPnts
+
+            geo.vKnotVec = isoCurves[0].knotVec  # All the knot vecs will be the same
+
+    else:
+        raise NotImplementedError("Degree elevation is not yet implemented for Volumes.")
 
 
 def reduceDegree(geo: GEOTYPE, param: List[int], tol: float = 1e-10) -> None:
@@ -349,8 +436,7 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = T
             return newSpan
 
     elif isinstance(geo, BSplineSurface):
-        # TODO: Fix this to work with new knot insertion function
-
+        # TODO: AL, fix the indexing for setting the control point slices
         # u-direction
         if param[0] is not None and num[0] > 0:
             knot = checkInput(param[0], "param[0]", float, 0)
@@ -416,7 +502,7 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = T
                 ctrlPntsTemp = utils.insertKnotCP(geo.vDegree, geo.vKnotVec, ccu, knot, rv, sv, spanv)
 
                 # Set the control point slice
-                newCtrlPnts[:, v] = ctrlPntsTemp[:, : geo.nCtlv + rv]
+                newCtrlPnts[u, :] = ctrlPntsTemp[:, : geo.nCtlv + rv]
 
             # Set the knot vector and control points
             geo.vKnotVec = vKnotVecNew
@@ -489,7 +575,7 @@ def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BS
 
     # Splitting in the u-direction
     if direction == "u":
-        _, breakPnt = insertKnot(surf, [param, None], [surf.uDegree - 1, 0])
+        breakPnt = insertKnot(surf, [param, None], [surf.uDegree - 1, 0])
 
         # Break point is to the right so we need to adjust the counter to the left
         breakPnt = breakPnt - surf.uDegree + 2
@@ -509,7 +595,7 @@ def splitSurface(surf: BSplineSurface, param: float, direction: str) -> Tuple[BS
 
     # Splitting in the v-direction
     elif direction == "v":
-        _, breakPnt = insertKnot(surf, [None, param], [0, surf.vDegree - 1])
+        breakPnt = insertKnot(surf, [None, param], [0, surf.vDegree - 1])
 
         # Break point is to the right so we need to adjust the counter to the left
         breakPnt = breakPnt - surf.vDegree + 2
@@ -613,13 +699,13 @@ def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
     u = checkInput(u, "u", float, 0)
 
     if u <= 0.0:
-        if curve._rational:
+        if curve.rational:
             return None, NURBSCurve(curve.degree, curve.knotVec.copy(), curve.ctrlPntsW.copy())
         else:
             return None, BSplineCurve(curve.degree, curve.knotVec.copy(), curve.ctrlPnts.copy())
 
     if u >= 1.0:
-        if curve._rational:
+        if curve.rational:
             return NURBSCurve(curve.degree, curve.knotVec.copy(), curve.ctrlPntsW.copy()), None
         else:
             return BSplineCurve(curve.degree, curve.knotVec.copy(), curve.ctrlPnts.copy()), None
@@ -659,11 +745,11 @@ def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
 
     # Create the new curves
     if curve.rational:
-        newCurve1 = NURBSCurve(tempCurve.degree, knotVec1, ctlPnts1)
-        newCurve2 = NURBSCurve(tempCurve.degree, knotVec2, ctlPnts2)
+        newCurve1 = NURBSCurve(deepcopy(tempCurve.degree), knotVec1, ctlPnts1)
+        newCurve2 = NURBSCurve(deepcopy(tempCurve.degree), knotVec2, ctlPnts2)
     else:
-        newCurve1 = BSplineCurve(tempCurve.degree, knotVec1, ctlPnts1)
-        newCurve2 = BSplineCurve(tempCurve.degree, knotVec2, ctlPnts2)
+        newCurve1 = BSplineCurve(deepcopy(tempCurve.degree), knotVec1, ctlPnts1)
+        newCurve2 = BSplineCurve(deepcopy(tempCurve.degree), knotVec2, ctlPnts2)
 
     return newCurve1, newCurve2
 

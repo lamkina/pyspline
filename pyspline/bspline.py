@@ -216,7 +216,7 @@ class BSplineSurface(Spline):
             self._ctrlPnts = ctrlPnts
         else:
             raise ValueError(
-                "Control point vector must be a 2D array of shape (nCtlu, nCtlv, nDim). "
+                "Control point vector must be a 3D array of shape (nCtlu, nCtlv, nDim). "
                 f"The input control point vector was shape: {ctrlPnts.shape}"
             )
 
