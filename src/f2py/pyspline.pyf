@@ -235,6 +235,29 @@ python module libspline ! in
             real(kind=realtype) dimension(ndim,nv,nu),intent(in),depend(nu,nv,ndim) :: x
             real(kind=realtype) intent(out) :: rms
         end subroutine surfaceparamcorr
+        subroutine pointcurve(points,knotvec,degree,pw,nctl,ndim,niter,eps,u,diff) ! in :libspline:projections.F90
+            use precision
+            real(kind=realtype) dimension(ndim),intent(in) :: points
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(ndim,nctl),intent(in),depend(ndim) :: pw
+            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
+            integer, optional,intent(in),check(shape(points, 0) == ndim),depend(points) :: ndim=shape(points, 0)
+            integer intent(in) :: niter
+            real(kind=realtype) intent(in) :: eps
+            real(kind=realtype) intent(out) :: u
+            real(kind=realtype) dimension(ndim),intent(out),depend(ndim) :: diff
+        end subroutine pointcurve
+        subroutine pointcurvestart(points,u,data,nu,ndim,n,uguess) ! in :libspline:projections.F90
+            use precision
+            real(kind=realtype) dimension(ndim,n),intent(in) :: points
+            real(kind=realtype) dimension(nu),intent(in) :: u
+            real(kind=realtype) dimension(ndim,nu),intent(in),depend(nu,ndim) :: data
+            integer, optional,intent(in),check(shape(u, 0) == nu),depend(u) :: nu=shape(u, 0)
+            integer, optional,intent(in),check(shape(points, 0) == ndim),depend(points) :: ndim=shape(points, 0)
+            integer, optional,intent(in),check(shape(points, 1) == n),depend(points) :: n=shape(points, 1)
+            real(kind=realtype) dimension(n),intent(out),depend(n) :: uguess
+        end subroutine pointcurvestart
     end interface
 end python module libspline
 

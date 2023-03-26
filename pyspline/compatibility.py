@@ -15,7 +15,7 @@ def combineCtrlPnts(ctrlPnts: np.ndarray, weights: Optional[np.ndarray] = None) 
     # Check the input weight array and set the value
     # If weights is None we set them to an array of 1's
     if weights is not None:
-        if len(weights) != np.prod(wShape[:-1]):
+        if len(weights.flatten()) != np.prod(wShape[:-1]):
             raise ValueError(
                 f"The length of the weight array must be {np.prod(wShape[:-1])}. Current length is {len(weights)}"
             )

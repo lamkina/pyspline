@@ -27,7 +27,7 @@ def mergeKnotVecs(curves: List[CURVETYPE]) -> None:
         for i, curve in enumerate(curves):
             num = maxMult - mult[i]
             if num > 0:
-                insertKnot(curve, [knot], num)
+                insertKnot(curve, [knot], [num])
 
 
 def decomposeCurve(curve: CURVETYPE) -> List[CURVETYPE]:

@@ -23,6 +23,8 @@ OBJS =  basis.o\
 	binomialCoeff.o\
 	curveFitting.o\
 	surfaceFitting.o\
+	projections.o\
+	linearAlgebra.o
 
 default:
 	$(MAKE) $(MODS)

@@ -173,7 +173,6 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
         if control_points:
             writeTecplot2D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
             if geo.rational:
-                print("here")
                 writeTecplot2D(file, "weighted_cpts", geo.ctrlPntsW[:, :, :-1], solutionTime=solutionTime)
         if orig and geo.X is not None:
             writeTecplot2D(file, "orig_data", geo.X, solutionTime=solutionTime)
