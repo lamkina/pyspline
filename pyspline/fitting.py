@@ -6,10 +6,264 @@ import numpy as np
 from scipy.sparse import csr_matrix, linalg
 
 # Local modules
-from . import libspline
+from . import libspline, compatibility, projections
 from . import parametrizations as param
 from .bspline import BSplineCurve, BSplineSurface
-from .utils import checkInput
+from .nurbs import NURBSCurve
+from .utils import checkInput, intersect3DLines
+
+
+def fitWithConic(Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray, tol: float=1e-12):
+    # TODO: AL, Adapt this to work iteratively
+    # TODO: AL, Get this working in general lol
+    ks = 0
+    ke = 3 if len(Q) >= 3 else len(Q)
+
+    if len(Q) == 2:
+        # no interior points to interpolate
+        # Fit interpolating segment (Section 9.3.3 from The NURBS book)
+        return 1
+
+    while ke < len(Q):
+        i, alpha1, alpha2, R = intersect3DLines(Q[ks], Ts, Q[ke], Te)
+
+        if i != 0:
+            # No intersection
+            if np.any(np.linalg.norm(np.cross(Q[1:], Q[:-1], axis=1), axis=1) != 0):
+                return 0  # Not all points are collinear
+
+            else:
+                Rw = (Q[ks] + Q[ke]) / 2.0
+                return 1, Rw
+
+        if alpha1 <= 0.0 or alpha2 >= 0.0:
+            return 0 # Violates Eq. 9.91 from The NURBS Book
+
+        s = 0.0
+        V = Q[ke] - Q[ks]
+
+        for i in range(ks+1, ke):
+            # Get conic interpolating each interior point
+            V1 = Q[i] - R
+            j, alpha1, alpha2, _ = intersect3DLines(Q[ks], V, R, V1)
+
+            if j != 0 or alpha1 <= 0.0 or alpha1 >= 1.0 or alpha2 <= 0.0:
+                return 0
+            
+            # Compute the weight using Algorithm 7.2 from The NURBS Book
+            a = np.sqrt(alpha2/(1 - alpha2))
+            u = a / (1.0 + a)
+            num = (1.0 -u) * (1.0 - u) * np.dot(Q[i] - Q[ks], R - Q[i]) + u * u * np.dot(Q[i]- Q[ke], R - Q[i])
+            den = 2 * u * (1 - u) * np.dot(R - Q[i], R-Q[i])
+            wi = num / den
+            s += wi / (1 + wi)
+        
+        s = s / (ke - ks - 1)
+        w = s / (1 - s)
+
+        if w < 0 or w > 1e6:
+            return 0  # Weights are out of bounds
+        
+        # Create a rational Bezier segment
+        ctrlPnts = np.vstack((Q[ks], R, Q[ke]))
+        ctrlPntsW = compatibility.combineCtrlPnts(ctrlPnts, np.array([1, w, 1]))
+        bezierCurve = NURBSCurve(2, np.array([0, 0, 0, 1, 1, 1]), ctrlPntsW)
+
+        for i in range(ks+1, ke):
+            # Project Qi onto the Bezier segment
+            _, distance = projections.pointCurve(Q[i], bezierCurve, 1e-12)
+            if distance[0] > tol:
+                return 0
+
+        Rw = compatibility.combineCtrlPnts(np.atleast_2d(R), np.atleast_1d(w))
+
+        return 1, Rw
+    
+
+
+def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational: bool = False, corners: bool=True):
+    data = Q.copy()
+    n, nDim = Q.shape
+    degree = 2 # Quadratic interpolation
+
+    if T is None:
+        m = n + 3  # length of the q vector
+        q = np.zeros((m, nDim))
+        q[2:m-2] = Q[1:] - Q[:-1]
+        T = np.zeros((n, nDim))
+        V = np.zeros((n, nDim))
+
+        # Equation 9.33 from The NURBS Book
+        # q[1] --> q0
+        # q[0] --> q-1
+        # q[n+1] --> qn+1
+        # q[n+2] --> qn+2
+        q[1] = 2 * q[2] - q[3]
+        q[0] = 2 * q[1] - q[2]
+        q[n+1] = 2 * q[n] - q[n-1]
+        q[n+2] = 2 * q[n+1] - q[n]
+
+        for k in range(n):
+            # Equation 9.31 from The NURBS Book
+            j = k + 1
+            num = np.linalg.norm(np.cross(q[j-1], q[j]))
+            denom1 = np.linalg.norm(np.cross(q[j-1], q[j]))
+            denom2 = np.linalg.norm(np.cross(q[j+1], q[j+2]))
+
+            if denom1 + denom2 == 0.0:  # Need to handle collinear cases
+                alpha = 1 if corners else 1/2
+            else:
+                alpha =  num / (denom1 + denom2)
+
+            # Equation 9.30 from The NURBS book
+            V[k] = (1 - alpha) * q[j] + alpha * q[j+1]
+        
+        # Equation 9.29 from The NURBS book
+        T = V / np.linalg.norm(V, axis=1)[:, np.newaxis]
+
+    R = []  # Interpolated control points
+    Qbar = []
+    for k in range(1, n):
+        # Try to compute the intersection between lines QTk-1 and QTk
+        flag, gammakm1, gammak, Rk = intersect3DLines(Q[k-1], T[k-1], Q[k], T[k])
+
+        if flag == 1:
+            # T[k-1] and T[k] are parallel ==> No intersection
+            chord = Q[k] - Q[k-1]
+           
+            # Check the collinear case where T[k-1] and T[k] or both parallel to the line Q[k-1] -- Q[k]
+            if np.all(np.cross(chord, T[k-1]) == 0) and np.all(np.cross(chord, T[k] == 0)):
+                # Tangents and the chord are collinear
+                Rk = 0.5 * (Q[k-1] + Q[k])
+                R.append(Rk)
+                Qbar.append(Q[k])
+            else:
+                # Not collinear, but tangents are parallel so we need to interpolate
+                gammak = gammak1 = 0.5 * np.linalg.norm(chord)
+
+                # Compute extra parabolic segments
+                Rkp = Q[k-1] + gammak * T[k-1]
+                Rkp1 = Q[k] - gammak1 * T[k]
+                Qkp = (gammak * Rkp1 + gammak1 * Rkp) / (gammak + gammak1)
+
+                R.append(Rkp)
+                R.append(Rkp1)
+                Qbar.append(Qkp)
+                Qbar.append(Q[k])
+
+        else:
+            # Tangents are not parallel
+            if gammak >= 0 or gammakm1 <= 0:
+                # Eq. 9.34 is not satisfied
+                chord = Q[k] - Q[k-1]
+                alpha = 2/3
+                cosThetak = np.dot(chord, T[k]) / (np.linalg.norm(chord) * np.linalg.norm(T[k]))
+                cosThetakm1 = np.dot(chord, T[k-1]) / (np.linalg.norm(chord) * np.linalg.norm(T[k-1]))
+
+                beta = 1/2 if rational else 1/4
+
+                gammak = beta * np.linalg.norm(chord) / (alpha * cosThetak + (1-alpha) * cosThetakm1)
+                gammak1 = beta * np.linalg.norm(chord) / (alpha * cosThetakm1 + (1-alpha) * cosThetak)
+
+                Rkp = Q[k-1] + gammak * T[k-1]
+                Rkp1 = Q[k] - gammak1 * T[k]
+                Qkp = (gammak * Rkp1 + gammak1 * Rkp) / (gammak + gammak1)
+
+                R.append(Rkp)
+                R.append(Rkp1)
+                Qbar.append(Qkp)
+                Qbar.append(Q[k])
+
+            else:
+                # Eq. 9.34 is satisfied
+                R.append(Rk)
+                Qbar.append(Q[k])
+
+    R = np.array(R)
+    R = np.insert(R, 0, [0, 0, 0], axis=0)
+    Qbar = np.array(Qbar)
+    Q = np.insert(Qbar, 0, Q[0], axis=0)
+
+    # The length of the control points may have changed due to interpolation, so we need to update "n"
+    n = len(Q)
+
+    W = np.ones(n+1) # Initialize to all ones
+    if rational:
+        # Compute the weights if the rational flag is True
+        for k in range(1,n):
+            if np.linalg.norm(np.cross(R[k]-Q[k-1], Q[k] - R[k])) < 1e-12:
+                # Qk-1, Rk, and Qk are collinear
+                W[k] = 1
+            
+            # Compute the edges of the triangle between Qk-1, Rk, and Qk
+            side1 = np.linalg.norm(R[k] - Q[k-1])
+            side2 = np.linalg.norm(Q[k] - R[k])
+
+            if side1 - side2 < 1e-12:
+                # Triangle is isosceles, use Eq. 7.33 (precise circular arc)
+                M = 0.5 * (Q[k-1] + Q[k])
+                side = R[k] - Q[k-1] # f = P1 - P2
+                base = M - Q[k-1]  # e = M - P2)
+
+                # Wk = cos(theta) = |e| / |f|
+                W[k] = np.linalg.norm(base) / np.linalg.norm(side)
+            else:
+                # Triangle is not isosceles
+                M = 0.5 * (Q[k-1] + Q[k])
+                vec0 = (M - R[k]) / np.linalg.norm(M - R[k])
+
+                # Find the unit vectors along each of the sides of the triangle
+                vec1 = (R[k] - Q[k-1]) / np.linalg.norm(R[k] - Q[k-1])
+                vec2 = (Q[k]  - Q[k-1]) / np.linalg.norm(Q[k]  - Q[k-1])
+
+                # Add the two vectors to get the bisecting unit vector
+                vec3 = vec1 + vec2
+
+                # Now find the intersection of vec3 and line RkM starting from Qk-1
+                _, _, _, S1 = intersect3DLines(Q[k-1], vec3, R[k], vec0)
+
+                # Repeat to find S2
+                vec1 = (R[k] - Q[k]) / np.linalg.norm(R[k] - Q[k])
+                vec2 = (Q[k-1] - Q[k]) / np.linalg.norm(Q[k-1] - Q[k])
+                vec3 = vec1 + vec2
+                _, _, _, S2 = intersect3DLines(Q[k], vec3, R[k], vec0)
+
+                # Compute the shoulder point
+                S = 0.5 * (S1 + S2)
+
+                # Use Eqs. 7.30 and 7.31 from The NURBS book to compute the weight
+                # s = np.linalg.norm(S - M) / np.linalg.norm(R[k] - M)
+                s = (S[0] - M[0]) / (R[k][0] - M[0])
+                W[k] = s / (1 - s)
+
+    ubar = np.zeros(n)
+    ubar[1] = 1
+    for k in range(2, n):
+        term1 = (ubar[k-1] - ubar[k-2])
+        term2 = np.linalg.norm(R[k] - Q[k-1]) / np.linalg.norm(Q[k-1] - R[k-1])
+        ubar[k] = ubar[k-1] + term1 * term2
+    
+
+    # Create the new control points: P={Q0, R1, R2, ... , Rn, Qn}
+    # len(P) = n - 1 + 1 + 1 = n + 1
+    P = np.zeros((n+1, nDim))
+    P[0] = Q[0]
+    P[-1] = Q[-1]
+    P[1:-1] = R[1:]
+
+    # Create the new knot vector
+    knotVec = np.zeros(len(P) + degree + 1)
+    knotVec[-3:] = 1
+    knotVec[3:-3] = ubar[1:-1] / ubar[-1]
+
+    if rational:
+        Pw = compatibility.combineCtrlPnts(P, W)
+        curve = NURBSCurve(degree, knotVec, Pw)
+    else:
+        curve = BSplineCurve(degree, knotVec, P)
+    
+    curve.X = data
+    return curve
 
 
 def curveLMSApprox(

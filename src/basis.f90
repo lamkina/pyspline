@@ -145,8 +145,8 @@ subroutine derivBasis(u, degree, knotVec, span, nCtl, order, Bd)
     do k = 1, order
         do j = 0, degree
             Bd(k, j) = Bd(k, j) * r
-            r = r * (degree - k)
         end do
+        r = r * (degree - k)
     end do
 
 end subroutine derivBasis

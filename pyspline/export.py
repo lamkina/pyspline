@@ -160,7 +160,7 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
 
     if isinstance(geo, BSplineCurve):
         if curve:
-            writeTecplot1D(file, "interpolated", geo.data, solutionTime=solutionTime)
+            writeTecplot1D(file, "interpolated", geo.data[:, :3], solutionTime=solutionTime)
         if control_points:
             writeTecplot1D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
             if geo.rational:
@@ -169,7 +169,7 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)
     elif isinstance(geo, BSplineSurface):
         if surf:
-            writeTecplot2D(file, "interpolated", geo.data, solutionTime=solutionTime)
+            writeTecplot2D(file, "interpolated", geo.data[:, :, :3], solutionTime=solutionTime)
         if control_points:
             writeTecplot2D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
             if geo.rational:

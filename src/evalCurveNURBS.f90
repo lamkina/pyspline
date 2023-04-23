@@ -16,7 +16,7 @@
 !>
 !> Notes:
 !>  This subroutine assumes that the last coordinate of each control point in the Pw array is its weight.
-subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val)
+subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val, w)
     use precision
     implicit none
 
@@ -28,12 +28,14 @@ subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val)
 
     ! Output
     real(kind=realType), intent(out) :: val(0:nDim - 1, 0:nPts - 1)
+    real(kind=realType), intent(out) :: w(0:nPts-1)
 
     ! Working
     integer :: i, j, istart, ileft
     real(kind=realType) :: B(0:degree)
 
     val(:, :) = 0.0
+    w(:) = 0.0
     do i = 0, nPts - 1
         call findSpan(u(i), degree, knotVec, nCtl, ileft)
         call basis(u(i), degree, knotVec, ileft, nCtl, B)
@@ -41,6 +43,7 @@ subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val)
         do j = 0, degree
             val(:, i) = val(:, i) + B(j) * Pw(:, istart + j)
         end do
+        w(i) = val(nDim - 1, i)
         val(:, i) = val(:, i) / val(nDim - 1, i)
     end do
 end subroutine evalCurveNURBS
@@ -68,7 +71,7 @@ subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, order, ck)
     ! First we need to evaluate the derivative of the weighted control points using
     ! `derivEvalCurve` for a non-rational B-Spline.
     ! This will get A(u) and w(u) and we store them in `ckw`
-    call derivEvalCurve(u, knotVec, degree, Pw, nCtl, nDim, order, ckw)
+    call derivEvalCurve(u, knotVec, degree, Pw, order, nCtl, nDim, ckw)
 
     ! Next we use Algorithm 4.2 from The NURBS Book to compute the true derivatives `ck`
     ck(:, :) = 0.0

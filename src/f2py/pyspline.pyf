@@ -49,7 +49,7 @@ python module libspline ! in
             integer, optional,intent(in),check(shape(p, 0) == ndim),depend(p) :: ndim=shape(p, 0)
             real(kind=realtype) dimension(ndim,1 + order),intent(out),depend(order,ndim) :: ck
         end subroutine derivevalcurve
-        subroutine evalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,npts,val) ! in :libspline:evalCurveNURBS.f90
+        subroutine evalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,npts,val,w) ! in :libspline:evalCurveNURBS.f90
             use precision
             real(kind=realtype) dimension(npts),intent(in) :: u
             real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
@@ -59,6 +59,7 @@ python module libspline ! in
             integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
             integer, optional,intent(in),check(shape(u, 0) == npts),depend(u) :: npts=shape(u, 0)
             real(kind=realtype) dimension(ndim,npts),intent(out),depend(npts,ndim) :: val
+            real(kind=realtype) dimension(npts),intent(out),depend(npts) :: w
         end subroutine evalcurvenurbs
         subroutine derivevalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,order,ck) ! in :libspline:evalCurveNURBS.f90
             use precision

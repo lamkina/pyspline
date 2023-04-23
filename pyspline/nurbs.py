@@ -1,11 +1,11 @@
 # Standard Python modules
-from typing import List
+from typing import List, Union
 
 # External modules
 import numpy as np
 
 # Local modules
-from . import libspline
+from . import libspline, utils
 from .bspline import BSplineCurve, BSplineSurface, BSplineVolume
 from .compatibility import combineCtrlPnts, separateCtrlPnts
 
@@ -58,7 +58,7 @@ class NURBSCurve(BSplineCurve):
 
         self.ctrlPntsW = combineCtrlPnts(self.ctrlPnts, weights)
 
-    def getValue(self, u: np.ndarray) -> np.ndarray:
+    def getValue(self, u: Union[np.ndarray, float]) -> np.ndarray:
         """
         Evaluate the spline at parametric position, u
 
@@ -76,13 +76,37 @@ class NURBSCurve(BSplineCurve):
             array of size (N, 3) (or size (N) if ndim=1)
         """
 
-        u = u.T
+        u = np.array(u).T
 
-        vals = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
+        vals, _ = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
 
-        return vals.squeeze().T[:, :3]
+        return vals.squeeze().T[:3] if np.ndim(vals.squeeze().T) == 1 else vals.squeeze().T[:, :3]
+    
+    def getWeight(self, u: Union[np.ndarray, float]) -> np.ndarray:
+        """
+        Evaluate the spline at parametric position, u
 
-    def __call__(self, u: np.ndarray) -> np.ndarray:
+        Parameters
+        ----------
+        u : float or np.ndarray
+            Parametric position(s) at which to evaluate the curve.
+
+        Returns
+        -------
+        values : np.ndarray of size nDim or size (N, 3)
+            The evaluated points. If a single scalar 'u' was given, the
+            result with be an array of length nDim (or a scalar if
+            nDim=1). If a vector of 'u' values were given it will be an
+            array of size (N, 3) (or size (N) if ndim=1)
+        """
+
+        u = np.array(u).T
+
+        _, weights = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
+
+        return weights.T
+
+    def __call__(self, u: Union[np.ndarray, float]) -> np.ndarray:
         """Equivalent to `getValue()`
 
         Parameters
@@ -99,6 +123,16 @@ class NURBSCurve(BSplineCurve):
             array of size (N, 3) (or size (N) if ndim=1)
         """
         return self.getValue(u)
+
+    def getDerivative(self, u: float, order: int) -> np.ndarray:
+        ck = libspline.derivevalcurvenurbs(u, self.knotVec, self.degree, self.ctrlPntsW.T, order)
+        return ck.T
+
+    def computeData(self, recompute: bool = False) -> None:
+        if self.data is None or recompute:
+            self.gPts = utils.calculateGrevillePoints(self.degree, self.nCtl, self.knotVec)
+            self.uData = utils.calculateInterpolatedGrevillePoints(10, self.gPts)
+            self.data = self.getValue(self.uData)
 
 
 class NURBSSurface(BSplineSurface):
@@ -185,7 +219,7 @@ class NURBSSurface(BSplineSurface):
         vals = libspline.evalsurfacenurbs(
             u, v, self.uKnotVec, self.vKnotVec, self.uDegree, self.vDegree, self.ctrlPntsW.T
         )
-        return vals.squeeze().T[:, :, :-1]
+        return vals.squeeze().T
 
     def __call__(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
         """
@@ -200,6 +234,19 @@ class NURBSSurface(BSplineSurface):
         self.edgeCurves[2] = NURBSCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctrlPntsW=self.ctrlPntsW[0, :])
         self.edgeCurves[3] = NURBSCurve(degree=self.vDegree, knotVec=self.vKnotVec, ctrlPntsW=self.ctrlPntsW[-1, :])
 
+    def computeData(self, recompute: bool = False) -> None:
+        if self.data is None or recompute:
+            curve0 = self.edgeCurves[0]
+            gPts0 = utils.calculateGrevillePoints(curve0.degree, curve0.nCtl, curve0.knotVec)
+
+            curve2 = self.edgeCurves[2]
+            gPts2 = utils.calculateGrevillePoints(curve2.degree, curve2.nCtl, curve2.knotVec)
+
+            self.uData = utils.calculateInterpolatedGrevillePoints(10, gPts0)
+            self.vData = utils.calculateInterpolatedGrevillePoints(10, gPts2)
+
+            self.V, self.U = np.meshgrid(self.vData, self.uData)
+            self.data = self.getValue(self.U, self.V)[:, :, :-1]
 
 class NURBSVolume(BSplineVolume):
     def __init__(

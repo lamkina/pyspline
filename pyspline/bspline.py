@@ -93,7 +93,7 @@ class BSplineCurve(Spline):
             nDim=1). If a vector of 'u' values were given it will be an
             array of size (N, 3) (or size (N) if ndim=1)
         """
-        u = u.T
+        u = np.array(u).T
         vals = libspline.evalcurve(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPnts.T)
 
         return vals.squeeze().T
