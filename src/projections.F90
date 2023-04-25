@@ -16,7 +16,7 @@
 #define wolfe .001
 #define nLine 20
 
-subroutine pointCurve(points, knotVec, degree, Pw, nCtl, nDim, nIter, eps, u, diff)
+subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, nCtl, nDim, u, diff)
 
     !***DESCRIPTION
     !
@@ -46,19 +46,25 @@ subroutine pointCurve(points, knotVec, degree, Pw, nCtl, nDim, nIter, eps, u, di
 
     ! Input
     integer, intent(in) :: degree, nCtl, nDim, nIter
-    real(kind=realType), intent(in) :: points(nDim)
+    real(kind=realType), intent(in) :: points(3)
     real(kind=realType), intent(in) :: knotVec(nCtl + degree + 1)
     real(kind=realType), intent(in) :: Pw(nDim, nCtl)
     real(kind=realType), intent(in) :: eps
 
     ! Output
-    real(kind=realType), intent(out) :: u, diff(nDim)
+    real(kind=realType), intent(out) :: u, diff(3)
 
     ! Working
-    real(kind=realType) :: val(nDim), deriv(nDim, 3), step, c, dist, p_diff
-    real(kind=realType) :: grad, hessian, update, R(nDim), nDist, fval, nfval, pgrad, newPt
+    real(kind=realType) :: val(3), deriv(3, 3), step, c, dist, p_diff, w
+    real(kind=realType) :: grad, hessian, update, R(3), nDist, fval, nfval, pgrad, newPt
     integer :: m, ii, NLSFail, order
     logical :: flag, cflag, rational
+
+    print *, points
+    print *, degree
+    print *, nIter
+    print *, Pw
+    print *, nCtl, nDim
 
     order = degree + 1
     if ( nDim == 3 ) then
@@ -72,11 +78,11 @@ subroutine pointCurve(points, knotVec, degree, Pw, nCtl, nDim, nIter, eps, u, di
 
         ! We need to check if the curve is rational or not based on the dimension
         if (rational) then
-            call evalCurveNURBS(u, knotVec, order-1, Pw, nCtl, nDim, 1, val)
-            call derivEvalCurveNURBS(u, knotVec, degree, Pw, 2, nCtl, nDim, deriv)
+            call evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, 1, val, w)
+            call derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, 2, deriv)
         else
             call evalCurve(u, knotVec, degree, Pw, nCtl, nDim, 1, val)
-            call derivEvalCurve(u, knotVec, degree, Pw, nCtl, nDim, 2, deriv)
+            call derivEvalCurve(u, knotVec, degree, Pw, 2, nCtl, nDim, deriv)
         end if
 
         ! Distance is R, "function value" fval is what we minimize
@@ -140,7 +146,7 @@ subroutine pointCurve(points, knotVec, degree, Pw, nCtl, nDim, nIter, eps, u, di
 
             ! Evaluate the new point
             if (rational) then
-                call evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, 1, val)
+                call evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, 1, val, w)
             else
                 call evalCurve(u, knotVec, degree, Pw, nCtl, nDim, 1, val)
             end if

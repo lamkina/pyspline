@@ -12,72 +12,130 @@ from .bspline import BSplineCurve, BSplineSurface
 from .nurbs import NURBSCurve
 from .utils import checkInput, intersect3DLines
 
-
-def fitWithConic(Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray, tol: float=1e-12):
-    # TODO: AL, Adapt this to work iteratively
-    # TODO: AL, Get this working in general lol
+def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int=2, tol: float=1e-6):
     ks = 0
-    ke = 3 if len(Q) >= 3 else len(Q)
+    ke = kMax
 
+    Pw = None  # Weighted control points
+    degree = 2 # Conics are always quadratic
+
+    # Loop over the segments from ks to ke to find a conic fit
+    # Accumulate the segments to build the full curve
+    # Knot vector is the accumulated chord lengths correspoinding to segment boundaries
+    # Need to use double knots to exactly represent conics
+    fit_flag = False
+    chords = []
+    while True:
+        flag, Rw = fitWithConic(ks, ke, Q, T[ks], T[ke], tol)
+
+        if flag:
+            # Succesfully found a conic fit for this segment
+            Qs = compatibility.combineCtrlPnts(np.atleast_2d(Q[ks]))
+            Qe = compatibility.combineCtrlPnts(np.atleast_2d(Q[ke]))
+            
+            if Pw is None:
+                Pw = np.vstack((Qs, Rw, Qe))
+            else:
+                Pw = np.vstack((Pw, Rw, Qe))
+
+            _, alpha1, alpha2, _ = intersect3DLines(Q[ks], T[ks], Q[ke], T[ke])
+
+            if ke == len(Q)-1:
+                fit_flag = True
+                break  # Fitting is complete
+            elif (ke + kMax) > len(Q)-1:
+                # Check if we will exceed the length of Q
+                ks = ke
+                ke = len(Q) - 1
+            else:
+                # Otherwise increment the end point by kMax
+                ks = ke
+                ke += kMax
+
+            chords.append(np.linalg.norm(Q[ke] - Q[ks]))
+        else:
+            # Did not find a conic fit
+            if ke - ks > 1:
+                # Decrease the interval by half and search again
+                ke = ke - (ke - ks) // 2
+            else:
+                # No fit and we are at the smallest possible interval
+                break
+    
+    chords = np.array(chords)
+    intKnots = np.cumsum(chords)
+    intKnots /= np.max(intKnots)
+    knotVec = np.hstacck((np.zeros(3), ))
+
+    # Return the status of the fitting algorithm and the nurbs curve
+    if fit_flag and Pw is not None:
+        curve = NURBSCurve(degree, knotVec, Pw)
+        return fit_flag, curve
+    else:
+        return fit_flag, None
+
+
+def fitWithConic(ks: int, ke: int, Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray, tol: float=1e-12):
     if len(Q) == 2:
         # no interior points to interpolate
-        # Fit interpolating segment (Section 9.3.3 from The NURBS book)
-        return 1
+        # Need to compute extra points between Qs and Qe
+        curve = curveLocalQuadInterp(np.vstack((Q[ks], Q[ke])), np.vstack((Ts, Te)), rational=True)
+        return 1, curve.ctrlPntsW
 
-    while ke < len(Q):
-        i, alpha1, alpha2, R = intersect3DLines(Q[ks], Ts, Q[ke], Te)
+    i, alpha1, alpha2, R = intersect3DLines(Q[ks], Ts, Q[ke], Te)
 
-        if i != 0:
-            # No intersection
-            if np.any(np.linalg.norm(np.cross(Q[1:], Q[:-1], axis=1), axis=1) != 0):
-                return 0  # Not all points are collinear
+    if i != 0:
+        # No intersection
+        if np.any(np.linalg.norm(np.cross(Q[1:], Q[:-1], axis=1), axis=1) != 0):
+            return 0, np.array([])  # Not all points are collinear
 
-            else:
-                Rw = (Q[ks] + Q[ke]) / 2.0
-                return 1, Rw
+        else:
+            Rw = (Q[ks] + Q[ke]) / 2.0
+            Rw = compatibility.combineCtrlPnts(np.atleast_2d(Rw))
+            return 1, Rw
 
-        if alpha1 <= 0.0 or alpha2 >= 0.0:
-            return 0 # Violates Eq. 9.91 from The NURBS Book
+    if alpha1 <= 0.0 or alpha2 >= 0.0:
+        return 0, np.array([]) # Violates Eq. 9.91 from The NURBS Book
 
-        s = 0.0
-        V = Q[ke] - Q[ks]
+    s = 0.0
+    V = Q[ke] - Q[ks]
 
-        for i in range(ks+1, ke):
-            # Get conic interpolating each interior point
-            V1 = Q[i] - R
-            j, alpha1, alpha2, _ = intersect3DLines(Q[ks], V, R, V1)
+    for i in range(ks+1, ke):
+        # Get conic interpolating each interior point
+        V1 = Q[i] - R
+        j, alpha1, alpha2, _ = intersect3DLines(Q[ks], V, R, V1)
 
-            if j != 0 or alpha1 <= 0.0 or alpha1 >= 1.0 or alpha2 <= 0.0:
-                return 0
-            
-            # Compute the weight using Algorithm 7.2 from The NURBS Book
-            a = np.sqrt(alpha2/(1 - alpha2))
-            u = a / (1.0 + a)
-            num = (1.0 -u) * (1.0 - u) * np.dot(Q[i] - Q[ks], R - Q[i]) + u * u * np.dot(Q[i]- Q[ke], R - Q[i])
-            den = 2 * u * (1 - u) * np.dot(R - Q[i], R-Q[i])
-            wi = num / den
-            s += wi / (1 + wi)
+        if j != 0 or alpha1 <= 0.0 or alpha1 >= 1.0 or alpha2 <= 0.0:
+            return 0, np.array([])
         
-        s = s / (ke - ks - 1)
-        w = s / (1 - s)
+        # Compute the weight using Algorithm 7.2 from The NURBS Book
+        a = np.sqrt(alpha1/(1 - alpha1))
+        u = a / (1.0 + a)
+        num = (1.0 -u) * (1.0 - u) * np.dot(Q[i] - Q[ks], R - Q[i]) + u * u * np.dot(Q[i]- Q[ke], R - Q[i])
+        den = 2 * u * (1 - u) * np.dot(R - Q[i], R-Q[i])
+        wi = num / den
+        s += wi / (1 + wi)
+    
+    s = s / (ke - ks - 1)
+    w = s / (1 - s)
 
-        if w < 0 or w > 1e6:
-            return 0  # Weights are out of bounds
+    if w < 0 or w > 1e6:
+        return 0  # Weights are out of bounds
         
-        # Create a rational Bezier segment
-        ctrlPnts = np.vstack((Q[ks], R, Q[ke]))
-        ctrlPntsW = compatibility.combineCtrlPnts(ctrlPnts, np.array([1, w, 1]))
-        bezierCurve = NURBSCurve(2, np.array([0, 0, 0, 1, 1, 1]), ctrlPntsW)
+    # Create a rational Bezier segment
+    ctrlPnts = np.vstack((Q[ks], R, Q[ke]))
+    ctrlPntsW = compatibility.combineCtrlPnts(ctrlPnts, np.array([1.0, float(w), 1.0]))
+    bezierCurve = NURBSCurve(2, np.array([0, 0, 0, 1, 1, 1]), ctrlPntsW)
 
-        for i in range(ks+1, ke):
-            # Project Qi onto the Bezier segment
-            _, distance = projections.pointCurve(Q[i], bezierCurve, 1e-12)
-            if distance[0] > tol:
-                return 0
+    for i in range(ks+1, ke):
+        # Project Qi onto the Bezier segment
+        _, distance = projections.pointCurve(Q[i], bezierCurve, 20, 1e-12)
+        if distance[0] > tol:
+            return 0, np.array([])
 
-        Rw = compatibility.combineCtrlPnts(np.atleast_2d(R), np.atleast_1d(w))
+    Rw = compatibility.combineCtrlPnts(np.atleast_2d(R), np.atleast_1d(w))
 
-        return 1, Rw
+    return 1, Rw
     
 
 
