@@ -16,7 +16,7 @@
 #define wolfe .001
 #define nLine 20
 
-subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, nCtl, nDim, u, diff)
+subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, u, nCtl, nDim, diff)
 
     !***DESCRIPTION
     !
@@ -52,7 +52,8 @@ subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, nCtl, nDim, u, di
     real(kind=realType), intent(in) :: eps
 
     ! Output
-    real(kind=realType), intent(out) :: u, diff(3)
+    real(kind=realType), intent(inout) :: u
+    real(kind=realType), intent(out) :: diff(3)
 
     ! Working
     real(kind=realType) :: val(3), deriv(3, 3), step, c, dist, p_diff, w
@@ -60,17 +61,11 @@ subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, nCtl, nDim, u, di
     integer :: m, ii, NLSFail, order
     logical :: flag, cflag, rational
 
-    print *, points
-    print *, degree
-    print *, nIter
-    print *, Pw
-    print *, nCtl, nDim
-
     order = degree + 1
     if ( nDim == 3 ) then
-        rational = .True.
-    else if ( nDim == 4 ) then
         rational = .False.
+    else if ( nDim == 4 ) then
+        rational = .True.
     end if
 
     NLSFail = 0
@@ -79,7 +74,7 @@ subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, nCtl, nDim, u, di
         ! We need to check if the curve is rational or not based on the dimension
         if (rational) then
             call evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, 1, val, w)
-            call derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, 2, deriv)
+            call derivEvalCurveNURBS(u, knotVec, degree, Pw, 2, nCtl, nDim, deriv)
         else
             call evalCurve(u, knotVec, degree, Pw, nCtl, nDim, 1, val)
             call derivEvalCurve(u, knotVec, degree, Pw, 2, nCtl, nDim, deriv)

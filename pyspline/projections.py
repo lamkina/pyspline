@@ -28,7 +28,6 @@ def pointCurve(points: np.ndarray, curve: CURVETYPE, nIter, tol: float, u: Optio
         ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
         u[i], D[i] = libspline.pointcurve(point, curve.knotVec, curve.degree, ctrlPnts.T, nIter, tol, u[i])
 
-
     return u.squeeze(), D.squeeze()
 
 

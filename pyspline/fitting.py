@@ -12,12 +12,13 @@ from .bspline import BSplineCurve, BSplineSurface
 from .nurbs import NURBSCurve
 from .utils import checkInput, intersect3DLines
 
-def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int=2, tol: float=1e-6):
+
+def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int = 2, tol: float = 1e-6):
     ks = 0
     ke = kMax
 
     Pw = None  # Weighted control points
-    degree = 2 # Conics are always quadratic
+    degree = 2  # Conics are always quadratic
 
     # Loop over the segments from ks to ke to find a conic fit
     # Accumulate the segments to build the full curve
@@ -32,18 +33,17 @@ def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int=2, tol: float=1e-6)
             # Succesfully found a conic fit for this segment
             Qs = compatibility.combineCtrlPnts(np.atleast_2d(Q[ks]))
             Qe = compatibility.combineCtrlPnts(np.atleast_2d(Q[ke]))
-            
+            chords.append(np.linalg.norm(Q[ke] - Q[ks]))
+
             if Pw is None:
                 Pw = np.vstack((Qs, Rw, Qe))
             else:
                 Pw = np.vstack((Pw, Rw, Qe))
 
-            _, alpha1, alpha2, _ = intersect3DLines(Q[ks], T[ks], Q[ke], T[ke])
-
-            if ke == len(Q)-1:
+            if ke == len(Q) - 1:
                 fit_flag = True
                 break  # Fitting is complete
-            elif (ke + kMax) > len(Q)-1:
+            elif (ke + kMax) > len(Q) - 1:
                 # Check if we will exceed the length of Q
                 ks = ke
                 ke = len(Q) - 1
@@ -51,8 +51,6 @@ def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int=2, tol: float=1e-6)
                 # Otherwise increment the end point by kMax
                 ks = ke
                 ke += kMax
-
-            chords.append(np.linalg.norm(Q[ke] - Q[ks]))
         else:
             # Did not find a conic fit
             if ke - ks > 1:
@@ -61,11 +59,13 @@ def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int=2, tol: float=1e-6)
             else:
                 # No fit and we are at the smallest possible interval
                 break
-    
+
     chords = np.array(chords)
-    intKnots = np.cumsum(chords)
-    intKnots /= np.max(intKnots)
-    knotVec = np.hstacck((np.zeros(3), ))
+    intKnots = np.cumsum(chords)  # The internal knots are the aggregated chord distances
+    intKnots = intKnots / np.max(intKnots)  # Normalize by the maximum value
+    intKnots = np.sort(np.tile(intKnots, 2))  # Create double knots and sort in ascending order
+    intKnots = intKnots[:-2]  # Remove end knots that are equal to 1.0 because we will replace them
+    knotVec = np.hstack((np.zeros(degree + 1), intKnots, np.ones(degree + 1)))
 
     # Return the status of the fitting algorithm and the nurbs curve
     if fit_flag and Pw is not None:
@@ -75,12 +75,12 @@ def localConicInterp(Q: np.ndarray, T: np.ndarray, kMax: int=2, tol: float=1e-6)
         return fit_flag, None
 
 
-def fitWithConic(ks: int, ke: int, Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray, tol: float=1e-12):
-    if len(Q) == 2:
+def fitWithConic(ks: int, ke: int, Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray, tol: float = 1e-12):
+    if ke - ks == 1:
         # no interior points to interpolate
         # Need to compute extra points between Qs and Qe
         curve = curveLocalQuadInterp(np.vstack((Q[ks], Q[ke])), np.vstack((Ts, Te)), rational=True)
-        return 1, curve.ctrlPntsW
+        return 1, curve.ctrlPntsW[1]
 
     i, alpha1, alpha2, R = intersect3DLines(Q[ks], Ts, Q[ke], Te)
 
@@ -95,39 +95,39 @@ def fitWithConic(ks: int, ke: int, Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray
             return 1, Rw
 
     if alpha1 <= 0.0 or alpha2 >= 0.0:
-        return 0, np.array([]) # Violates Eq. 9.91 from The NURBS Book
+        return 0, np.array([])  # Violates Eq. 9.91 from The NURBS Book
 
     s = 0.0
     V = Q[ke] - Q[ks]
 
-    for i in range(ks+1, ke):
+    for i in range(ks + 1, ke):
         # Get conic interpolating each interior point
         V1 = Q[i] - R
         j, alpha1, alpha2, _ = intersect3DLines(Q[ks], V, R, V1)
 
         if j != 0 or alpha1 <= 0.0 or alpha1 >= 1.0 or alpha2 <= 0.0:
             return 0, np.array([])
-        
+
         # Compute the weight using Algorithm 7.2 from The NURBS Book
-        a = np.sqrt(alpha1/(1 - alpha1))
+        a = np.sqrt(alpha1 / (1 - alpha1))
         u = a / (1.0 + a)
-        num = (1.0 -u) * (1.0 - u) * np.dot(Q[i] - Q[ks], R - Q[i]) + u * u * np.dot(Q[i]- Q[ke], R - Q[i])
-        den = 2 * u * (1 - u) * np.dot(R - Q[i], R-Q[i])
+        num = (1.0 - u) * (1.0 - u) * np.dot(Q[i] - Q[ks], R - Q[i]) + u * u * np.dot(Q[i] - Q[ke], R - Q[i])
+        den = 2 * u * (1 - u) * np.dot(R - Q[i], R - Q[i])
         wi = num / den
         s += wi / (1 + wi)
-    
+
     s = s / (ke - ks - 1)
     w = s / (1 - s)
 
     if w < 0 or w > 1e6:
         return 0  # Weights are out of bounds
-        
+
     # Create a rational Bezier segment
     ctrlPnts = np.vstack((Q[ks], R, Q[ke]))
     ctrlPntsW = compatibility.combineCtrlPnts(ctrlPnts, np.array([1.0, float(w), 1.0]))
     bezierCurve = NURBSCurve(2, np.array([0, 0, 0, 1, 1, 1]), ctrlPntsW)
 
-    for i in range(ks+1, ke):
+    for i in range(ks + 1, ke):
         # Project Qi onto the Bezier segment
         _, distance = projections.pointCurve(Q[i], bezierCurve, 20, 1e-12)
         if distance[0] > tol:
@@ -136,18 +136,17 @@ def fitWithConic(ks: int, ke: int, Q: np.ndarray, Ts: np.ndarray, Te: np.ndarray
     Rw = compatibility.combineCtrlPnts(np.atleast_2d(R), np.atleast_1d(w))
 
     return 1, Rw
-    
 
 
-def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational: bool = False, corners: bool=True):
+def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational: bool = False, corners: bool = True):
     data = Q.copy()
     n, nDim = Q.shape
-    degree = 2 # Quadratic interpolation
+    degree = 2  # Quadratic interpolation
 
     if T is None:
         m = n + 3  # length of the q vector
         q = np.zeros((m, nDim))
-        q[2:m-2] = Q[1:] - Q[:-1]
+        q[2 : m - 2] = Q[1:] - Q[:-1]
         T = np.zeros((n, nDim))
         V = np.zeros((n, nDim))
 
@@ -158,24 +157,24 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
         # q[n+2] --> qn+2
         q[1] = 2 * q[2] - q[3]
         q[0] = 2 * q[1] - q[2]
-        q[n+1] = 2 * q[n] - q[n-1]
-        q[n+2] = 2 * q[n+1] - q[n]
+        q[n + 1] = 2 * q[n] - q[n - 1]
+        q[n + 2] = 2 * q[n + 1] - q[n]
 
         for k in range(n):
             # Equation 9.31 from The NURBS Book
             j = k + 1
-            num = np.linalg.norm(np.cross(q[j-1], q[j]))
-            denom1 = np.linalg.norm(np.cross(q[j-1], q[j]))
-            denom2 = np.linalg.norm(np.cross(q[j+1], q[j+2]))
+            num = np.linalg.norm(np.cross(q[j - 1], q[j]))
+            denom1 = np.linalg.norm(np.cross(q[j - 1], q[j]))
+            denom2 = np.linalg.norm(np.cross(q[j + 1], q[j + 2]))
 
             if denom1 + denom2 == 0.0:  # Need to handle collinear cases
-                alpha = 1 if corners else 1/2
+                alpha = 1 if corners else 1 / 2
             else:
-                alpha =  num / (denom1 + denom2)
+                alpha = num / (denom1 + denom2)
 
             # Equation 9.30 from The NURBS book
-            V[k] = (1 - alpha) * q[j] + alpha * q[j+1]
-        
+            V[k] = (1 - alpha) * q[j] + alpha * q[j + 1]
+
         # Equation 9.29 from The NURBS book
         T = V / np.linalg.norm(V, axis=1)[:, np.newaxis]
 
@@ -183,16 +182,16 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
     Qbar = []
     for k in range(1, n):
         # Try to compute the intersection between lines QTk-1 and QTk
-        flag, gammakm1, gammak, Rk = intersect3DLines(Q[k-1], T[k-1], Q[k], T[k])
+        flag, gammakm1, gammak, Rk = intersect3DLines(Q[k - 1], T[k - 1], Q[k], T[k])
 
         if flag == 1:
             # T[k-1] and T[k] are parallel ==> No intersection
-            chord = Q[k] - Q[k-1]
-           
+            chord = Q[k] - Q[k - 1]
+
             # Check the collinear case where T[k-1] and T[k] or both parallel to the line Q[k-1] -- Q[k]
-            if np.all(np.cross(chord, T[k-1]) == 0) and np.all(np.cross(chord, T[k] == 0)):
+            if np.all(np.cross(chord, T[k - 1]) == 0) and np.all(np.cross(chord, T[k] == 0)):
                 # Tangents and the chord are collinear
-                Rk = 0.5 * (Q[k-1] + Q[k])
+                Rk = 0.5 * (Q[k - 1] + Q[k])
                 R.append(Rk)
                 Qbar.append(Q[k])
             else:
@@ -200,7 +199,7 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
                 gammak = gammak1 = 0.5 * np.linalg.norm(chord)
 
                 # Compute extra parabolic segments
-                Rkp = Q[k-1] + gammak * T[k-1]
+                Rkp = Q[k - 1] + gammak * T[k - 1]
                 Rkp1 = Q[k] - gammak1 * T[k]
                 Qkp = (gammak * Rkp1 + gammak1 * Rkp) / (gammak + gammak1)
 
@@ -213,17 +212,17 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
             # Tangents are not parallel
             if gammak >= 0 or gammakm1 <= 0:
                 # Eq. 9.34 is not satisfied
-                chord = Q[k] - Q[k-1]
-                alpha = 2/3
+                chord = Q[k] - Q[k - 1]
+                alpha = 2 / 3
                 cosThetak = np.dot(chord, T[k]) / (np.linalg.norm(chord) * np.linalg.norm(T[k]))
-                cosThetakm1 = np.dot(chord, T[k-1]) / (np.linalg.norm(chord) * np.linalg.norm(T[k-1]))
+                cosThetakm1 = np.dot(chord, T[k - 1]) / (np.linalg.norm(chord) * np.linalg.norm(T[k - 1]))
 
-                beta = 1/2 if rational else 1/4
+                beta = 1 / 2 if rational else 1 / 4
 
-                gammak = beta * np.linalg.norm(chord) / (alpha * cosThetak + (1-alpha) * cosThetakm1)
-                gammak1 = beta * np.linalg.norm(chord) / (alpha * cosThetakm1 + (1-alpha) * cosThetak)
+                gammak = beta * np.linalg.norm(chord) / (alpha * cosThetak + (1 - alpha) * cosThetakm1)
+                gammak1 = beta * np.linalg.norm(chord) / (alpha * cosThetakm1 + (1 - alpha) * cosThetak)
 
-                Rkp = Q[k-1] + gammak * T[k-1]
+                Rkp = Q[k - 1] + gammak * T[k - 1]
                 Rkp1 = Q[k] - gammak1 * T[k]
                 Qkp = (gammak * Rkp1 + gammak1 * Rkp) / (gammak + gammak1)
 
@@ -245,44 +244,44 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
     # The length of the control points may have changed due to interpolation, so we need to update "n"
     n = len(Q)
 
-    W = np.ones(n+1) # Initialize to all ones
+    W = np.ones(n + 1)  # Initialize to all ones
     if rational:
         # Compute the weights if the rational flag is True
-        for k in range(1,n):
-            if np.linalg.norm(np.cross(R[k]-Q[k-1], Q[k] - R[k])) < 1e-12:
+        for k in range(1, n):
+            if np.linalg.norm(np.cross(R[k] - Q[k - 1], Q[k] - R[k])) < 1e-12:
                 # Qk-1, Rk, and Qk are collinear
                 W[k] = 1
-            
+
             # Compute the edges of the triangle between Qk-1, Rk, and Qk
-            side1 = np.linalg.norm(R[k] - Q[k-1])
+            side1 = np.linalg.norm(R[k] - Q[k - 1])
             side2 = np.linalg.norm(Q[k] - R[k])
 
             if side1 - side2 < 1e-12:
                 # Triangle is isosceles, use Eq. 7.33 (precise circular arc)
-                M = 0.5 * (Q[k-1] + Q[k])
-                side = R[k] - Q[k-1] # f = P1 - P2
-                base = M - Q[k-1]  # e = M - P2)
+                M = 0.5 * (Q[k - 1] + Q[k])
+                side = R[k] - Q[k - 1]  # f = P1 - P2
+                base = M - Q[k - 1]  # e = M - P2)
 
                 # Wk = cos(theta) = |e| / |f|
                 W[k] = np.linalg.norm(base) / np.linalg.norm(side)
             else:
                 # Triangle is not isosceles
-                M = 0.5 * (Q[k-1] + Q[k])
+                M = 0.5 * (Q[k - 1] + Q[k])
                 vec0 = (M - R[k]) / np.linalg.norm(M - R[k])
 
                 # Find the unit vectors along each of the sides of the triangle
-                vec1 = (R[k] - Q[k-1]) / np.linalg.norm(R[k] - Q[k-1])
-                vec2 = (Q[k]  - Q[k-1]) / np.linalg.norm(Q[k]  - Q[k-1])
+                vec1 = (R[k] - Q[k - 1]) / np.linalg.norm(R[k] - Q[k - 1])
+                vec2 = (Q[k] - Q[k - 1]) / np.linalg.norm(Q[k] - Q[k - 1])
 
                 # Add the two vectors to get the bisecting unit vector
                 vec3 = vec1 + vec2
 
                 # Now find the intersection of vec3 and line RkM starting from Qk-1
-                _, _, _, S1 = intersect3DLines(Q[k-1], vec3, R[k], vec0)
+                _, _, _, S1 = intersect3DLines(Q[k - 1], vec3, R[k], vec0)
 
                 # Repeat to find S2
                 vec1 = (R[k] - Q[k]) / np.linalg.norm(R[k] - Q[k])
-                vec2 = (Q[k-1] - Q[k]) / np.linalg.norm(Q[k-1] - Q[k])
+                vec2 = (Q[k - 1] - Q[k]) / np.linalg.norm(Q[k - 1] - Q[k])
                 vec3 = vec1 + vec2
                 _, _, _, S2 = intersect3DLines(Q[k], vec3, R[k], vec0)
 
@@ -297,14 +296,13 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
     ubar = np.zeros(n)
     ubar[1] = 1
     for k in range(2, n):
-        term1 = (ubar[k-1] - ubar[k-2])
-        term2 = np.linalg.norm(R[k] - Q[k-1]) / np.linalg.norm(Q[k-1] - R[k-1])
-        ubar[k] = ubar[k-1] + term1 * term2
-    
+        term1 = ubar[k - 1] - ubar[k - 2]
+        term2 = np.linalg.norm(R[k] - Q[k - 1]) / np.linalg.norm(Q[k - 1] - R[k - 1])
+        ubar[k] = ubar[k - 1] + term1 * term2
 
     # Create the new control points: P={Q0, R1, R2, ... , Rn, Qn}
     # len(P) = n - 1 + 1 + 1 = n + 1
-    P = np.zeros((n+1, nDim))
+    P = np.zeros((n + 1, nDim))
     P[0] = Q[0]
     P[-1] = Q[-1]
     P[1:-1] = R[1:]
@@ -319,7 +317,7 @@ def curveLocalQuadInterp(Q: np.ndarray, T: Optional[np.ndarray] = None, rational
         curve = NURBSCurve(degree, knotVec, Pw)
     else:
         curve = BSplineCurve(degree, knotVec, P)
-    
+
     curve.X = data
     return curve
 

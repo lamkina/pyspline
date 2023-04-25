@@ -61,15 +61,15 @@ python module libspline ! in
             real(kind=realtype) dimension(ndim,npts),intent(out),depend(npts,ndim) :: val
             real(kind=realtype) dimension(npts),intent(out),depend(npts) :: w
         end subroutine evalcurvenurbs
-        subroutine derivevalcurvenurbs(u,knotvec,degree,pw,nctl,ndim,order,ck) ! in :libspline:evalCurveNURBS.f90
+        subroutine derivevalcurvenurbs(u,knotvec,degree,pw,order,nctl,ndim,ck) ! in :libspline:evalCurveNURBS.f90
             use precision
             real(kind=realtype) intent(in) :: u
             real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(nctl,degree) :: knotvec
             integer, required,intent(in) :: degree
             real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            integer intent(in) :: order
             integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
             integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
-            integer intent(in) :: order
             real(kind=realtype) dimension(-1 + ndim,1 + order),intent(out),depend(order,ndim) :: ck
         end subroutine derivevalcurvenurbs
         subroutine evalsurface(u,v,uknotvec,vknotvec,udegree,vdegree,p,nctlu,nctlv,ndim,n,m,val) ! in :libspline:evalSurface.f90
@@ -236,17 +236,17 @@ python module libspline ! in
             real(kind=realtype) dimension(ndim,nv,nu),intent(in),depend(nu,nv,ndim) :: x
             real(kind=realtype) intent(out) :: rms
         end subroutine surfaceparamcorr
-        subroutine pointcurve(points,knotvec,degree,pw,niter,eps,nctl,ndim,u,diff) ! in :libspline:projections.F90
+        subroutine pointcurve(points,knotvec,degree,pw,niter,eps,u,nctl,ndim,diff) ! in :libspline.projections.F90
             use precision
             real(kind=realtype) dimension(3),intent(in) :: points
-            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
-            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(nctl+degree+1),intent(in),depend(degree,nctl) :: knotvec
+            integer intent(in) :: degree
             real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
-            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
-            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
             integer intent(in) :: niter
             real(kind=realtype) intent(in) :: eps
             real(kind=realtype) intent(in,out) :: u
+            integer, optional,intent(in),check(shape(pw,1)==nctl),depend(pw) :: nctl=shape(pw,1)
+            integer, optional,intent(in),check(shape(pw,0)==ndim),depend(pw) :: ndim=shape(pw,0)
             real(kind=realtype) dimension(3),intent(out) :: diff
         end subroutine pointcurve
         subroutine pointcurvestart(points,u,data,nu,ndim,n,uguess) ! in :libspline:projections.F90

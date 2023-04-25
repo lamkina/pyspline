@@ -48,7 +48,7 @@ subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val, w)
     end do
 end subroutine evalCurveNURBS
 
-subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, order, ck)
+subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, order, nCtl, nDim, ck)
     ! NOTE: We use 0-based indexing to be consistent with algorithms
     ! in The NURBS Book.
     ! NOTE: The control points are the spatial dimension + 1 to account for
@@ -77,9 +77,9 @@ subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, order, ck)
     ck(:, :) = 0.0
     do k = 0, order
         v = ckw(0:nDim - 2, k)
-        do i = 1, k + 1
+        do i = 1, k
             call bin(k, i, binCoeff)
-            v = v - (binCoeff * ckw(nDim - 1, i) * ck(:, k - i))
+            v = v - (binCoeff * ckw(nDim-1, i) * ck(:, k - i))
         end do
         ck(:, k) = v / ckw(nDim - 1, 0)
     end do
