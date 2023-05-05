@@ -1,5 +1,5 @@
 # Standard Python modules
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 # External modules
 import numpy as np
@@ -76,7 +76,7 @@ class BSplineCurve(Spline):
                 f"The input control point vector was shape: {ctrlPnts.shape}"
             )
 
-    def getValue(self, u: np.ndarray) -> np.ndarray:
+    def getValue(self, u: Union[float, np.ndarray]) -> np.ndarray:
         """
         Evaluate the spline at parametric position, u
 
@@ -103,7 +103,7 @@ class BSplineCurve(Spline):
 
         return ck.T
 
-    def __call__(self, u: np.ndarray) -> np.ndarray:
+    def __call__(self, u: Union[float, np.ndarray]) -> np.ndarray:
         """
         Equivalent to getValue()
         """
@@ -244,7 +244,7 @@ class BSplineSurface(Spline):
         elif corner == 3:
             return self.getValue(1, 1)
 
-    def getValue(self, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    def getValue(self, u: Union[float, np.ndarray], v: Union[float, np.ndarray]) -> np.ndarray:
         """Evaluate the b-spline surface at parametric positions u,v. This is the
         main function for spline evaluation.
 
@@ -355,8 +355,184 @@ class BSplineVolume(Spline):
         vKnotVec: np.ndarray,
         wKnotVec: np.ndarray,
     ) -> None:
+        self.uDegree = uDegree
+        self.vDegree = vDegree
+        self.wDegree = wDegree
+        self.ctrlPnts = ctrlPnts
+        self.uKnotVec = uKnotVec
+        self.vKnotVec = vKnotVec
+        self.wKnotVec = wKnotVec
+
+        # Other attributes
+        self.u = None
+        self.v = None
+        self.U = None
+        self.V = None
+        self.uData = None
+        self.vData = None
+        self.data = None
+
         super(BSplineVolume, self).__init__()
 
     @property
     def pDim(self) -> int:
         return 3
+
+    @property
+    def nCtlu(self) -> int:
+        return self.ctrlPnts.shape[0]
+
+    @property
+    def nCtlv(self) -> int:
+        return self.ctrlPnts.shape[1]
+
+    @property
+    def nCtlw(self) -> int:
+        return self.ctrlPnts.shape[2]
+
+    @property
+    def nDim(self) -> int:
+        return self.ctrlPnts.shape[3]
+
+    @property
+    def uDegree(self) -> int:
+        return self._uDegree
+
+    @uDegree.setter
+    def uDegree(self, value: int) -> None:
+        self._uDegree = value
+
+    @property
+    def vDegree(self) -> int:
+        return self._vDegree
+
+    @vDegree.setter
+    def uDegree(self, value: int) -> None:
+        self._vDegree = value
+
+    @property
+    def wDegree(self) -> int:
+        return self._wDegree
+
+    @wDegree.setter
+    def uDegree(self, value: int) -> None:
+        self._wDegree = value
+
+    @property
+    def uKnotVec(self) -> np.ndarray:
+        kv = self._uKnotVec
+        return (kv - kv[0]) / (kv[-1] - kv[0])
+
+    @uKnotVec.setter
+    def uKnotVec(self, uKnotVec: np.ndarray) -> None:
+        if not np.all(uKnotVec[:-1] <= uKnotVec[1:]):
+            raise ValueError("Knot vector is not in ascending order.")
+
+        if len(uKnotVec) != (self.nCtlu + self.uDegree + 1):
+            raise ValueError(
+                f"Knot vector is not the correct length. "
+                f"Input length was {len(uKnotVec)} and it should be length {self.nCtlu + self._uDegree + 1}"
+            )
+
+        self._uKnotVec = uKnotVec
+
+    @property
+    def vKnotVec(self) -> np.ndarray:
+        kv = self._vKnotVec
+        return (kv - kv[0]) / (kv[-1] - kv[0])
+
+    @vKnotVec.setter
+    def vKnotVec(self, vKnotVec: np.ndarray) -> None:
+        if not np.all(vKnotVec[:-1] <= vKnotVec[1:]):
+            raise ValueError("Knot vector is not in ascending order.")
+
+        if len(vKnotVec) != (self.nCtlv + self.vDegree + 1):
+            raise ValueError(
+                f"Knot vector is not the correct length. "
+                f"Input length was {len(vKnotVec)} and it should be length {self.nCtlv + self._vDegree + 1}"
+            )
+
+        self._vKnotVec = vKnotVec
+
+    @property
+    def wKnotVec(self) -> np.ndarray:
+        kv = self._wKnotVec
+        return (kv - kv[0]) / (kv[-1] - kv[0])
+
+    @wKnotVec.setter
+    def wKnotVec(self, wKnotVec: np.ndarray) -> None:
+        if not np.all(wKnotVec[:-1] <= wKnotVec[1:]):
+            raise ValueError("Knot vector is not in ascending order.")
+
+        if len(wKnotVec) != (self.nCtlw + self.vDegree + 1):
+            raise ValueError(
+                f"Knot vector is not the correct length. "
+                f"Input length was {len(wKnotVec)} and it should be length {self.nCtlv + self._wDegree + 1}"
+            )
+
+        self._wKnotVec = wKnotVec
+
+    @property
+    def ctrlPnts(self) -> np.ndarray:
+        return self._ctrlPnts
+
+    @ctrlPnts.setter
+    def ctrlPnts(self, ctrlPnts: np.ndarray) -> None:
+        if ctrlPnts.ndim == 3:
+            self._ctrlPnts = ctrlPnts
+        else:
+            raise ValueError(
+                "Control point vector must be a 3D array of shape (nCtlu, nCtlv, nDim). "
+                f"The input control point vector was shape: {ctrlPnts.shape}"
+            )
+
+    def setEdgeSurfaces(self):
+        pass
+
+    def setEdgeCurves(self):
+        pass
+
+    def getValueCorner(self, corner: int) -> float:
+        if corner not in range(0, 8):
+            raise ValueError("Corner must be in range [0,7] inclusive.")
+
+        pass
+
+    def getValueEdge(self, edge, u):
+        pass
+
+    def getBounds(self):
+        pass
+
+    def getValue(
+        self, u: Union[float, np.ndarray], v: Union[float, np.ndarray], w: Union[float, np.ndarray]
+    ) -> np.ndarray:
+        u = np.atleast_3d(u).T
+        v = np.atleast_3d(v).T
+        w = np.atleast_3d(w).T
+
+        if not u.shape == v.shape == w.shape:
+            raise ValueError("u, v, and w must have the same shape.")
+
+        vals = libspline.evalvolume(
+            u,
+            v,
+            w,
+            self.uKnotVec,
+            self.vKnotVec,
+            self.wKnotVec,
+            self.uDegree,
+            self.vDegree,
+            self.wDegree,
+            self.ctrlPnts.T,
+        )
+
+        return vals.squeeze().T
+
+    def __call__(
+        self, u: Union[float, np.ndarray], v: Union[float, np.ndarray], w: Union[float, np.ndarray]
+    ) -> np.ndarray:
+        return self.getValue(u, v, w)
+
+    def computeData(self, recompute=False):
+        pass
