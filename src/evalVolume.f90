@@ -83,8 +83,8 @@ subroutine evalVolume(u, v, w, uKnotVec, vKnotVec, wKnotVec, uDegree, vDegree, w
     end do
 end subroutine evalVolume
 
-subroutine derivEvalVolume(u, v, w, uKnotVec, vKnotVec, wKnotVec, uDegree, vDegree, wDegree, P, order &
-                             nCtlu, nCtlv, nCtlw, nDim, val)
+subroutine derivEvalVolume(u, v, w, uKnotVec, vKnotVec, wKnotVec, uDegree, vDegree, wDegree, P, order, &
+                             nCtlu, nCtlv, nCtlw, nDim, vlmn)
 
     !***DESCRIPTION
     !
@@ -124,16 +124,15 @@ subroutine derivEvalVolume(u, v, w, uKnotVec, vKnotVec, wKnotVec, uDegree, vDegr
     real(kind=realType), intent(in) :: P(nDim, nCtlw, nCtlv, nCtlu)
 
     ! Output
-    real(kind=realType), intent(out) :: skl(0:nDim-1, 0:order, 0:order, 0:order)
+    real(kind=realType), intent(out) :: vlmn(0:nDim-1, 0:order, 0:order, 0:order)
 
     ! Working
-    integer :: istartu, istartv, istartw, ii, jj, kk, i, j, k, du, dv, dw, dd, q
+    integer :: istartu, istartv, istartw, du, dv, dw, i, j, k, l, m, n
     integer :: ileftu, ileftv, ileftw
     real(kind=realType) :: Bdu(0:min(uDegree, order), 0:uDegree), Bdv(0:min(vDegree, order), 0:vDegree), Bdw(0:min(wDegree, order), 0:wDegree)
-    real(kind=realType) :: temp(0:vDegree, 0:nDim)
 
     ! Initialize the derivatives to zeros
-    skl(:, :, :, :) = 0.0
+    vlmn(:, :, :, :) = 0.0
 
     ! Get the highest available derivaitve order
     ! (Can only be as big as the degree in each parameteric direction)
@@ -154,7 +153,20 @@ subroutine derivEvalVolume(u, v, w, uKnotVec, vKnotVec, wKnotVec, uDegree, vDegr
     call derivBasis(w, wDegree, wKnotVec, ileftw, nCtlw, dw, Bdw)
     istartw = ileftw - wDegree
 
-    ! TODO: Finish volume derivatives
-
-
+    ! Loop over the u, v, and w degree starting at 0 (4 values).
+    do i = 0, uDegree
+        do j = 0, vDegree
+            do k = 0, wDegree
+                ! Loop over the requested derivative order
+                do l=0,du
+                    do m=0,dv
+                        do n=0,dw
+                            ! Sum the contributions from each partial derivative
+                            vlmn(:, l, m, n) = vlmn(:, l, m, n) + Bdu(l, i) * Bdv(m, j) * Bdw(n, k) * P(:, istartw + k, istartv + j, istartu + i)
+                        end do
+                    end do
+                end do
+            end do
+        end do 
+    end do
 end subroutine derivEvalVolume
