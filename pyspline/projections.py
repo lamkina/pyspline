@@ -1,16 +1,17 @@
 # Standard Python modules
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 # External modules
-from .customTypes import CURVETYPE, SURFTYPE
-
 import numpy as np
 
 # Local modules
 from . import libspline
+from .customTypes import CURVETYPE, SURFTYPE
 
 
-def pointCurve(points: np.ndarray, curve: CURVETYPE, nIter, tol: float, u: Optional[np.ndarray] = None) -> float:
+def pointCurve(
+    points: np.ndarray, curve: CURVETYPE, nIter: int = 10, tol: float = 1e-6, u: Optional[np.ndarray] = None
+) -> Tuple[float, float]:
     points = np.atleast_2d(points)
 
     if u is not None:

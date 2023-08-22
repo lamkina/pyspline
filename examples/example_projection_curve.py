@@ -1,51 +1,36 @@
-# This is a test script to test the functionality of the
-# pySpline curve class
-
 # External modules
 import numpy as np
 
 # First party modules
-from pyspline import Curve
-
-# Get some Helix-like data
-
-n = 100
-theta = np.linspace(0.0000, 2 * np.pi, n)
-x = np.cos(theta)
-y = np.sin(theta)
-z = np.linspace(0, 1, n)
-print("Helix Data")
-curve = Curve(x=x, y=y, z=z, k=4, Nctl=16, niter=100)
-curve.writeTecplot("helix.dat")
-
-# Load naca0012 data
-print("Naca 0012 data")
-x, y = np.loadtxt("naca0012", unpack=True)
-curve = Curve(x=x, y=y, k=4, Nctl=11, niter=500)
-curve.writeTecplot("naca_data.dat")
+from pyspline.export import writeTecplot
+from pyspline.fitting import curveLMSApprox
+from pyspline.projections import curveCurve, pointCurve
 
 # Projection Tests
 print("Projection Tests")
 x = [0, 2, 3, 5]
 y = [-2, 5, 3, 0]
 z = [0, 0, 0, 0]
-curve1 = Curve(x=x, y=y, z=z, k=4)
 
-curve1.writeTecplot("curve1.dat")
+points = np.column_stack((x, y, z))
+curve1 = curveLMSApprox(points=points, degree=3, nCtl=4)
+writeTecplot(curve1, "curve1.dat")
 
 x = [-2, 5, 2, 1]
 y = [5, 1, 4, 2]
 z = [3, 0, 1, 4]
 
-curve2 = Curve(x=x, y=y, z=z, k=4)
-curve2.writeTecplot("curve2.dat")
+points = np.column_stack((x, y, z))
+curve2 = curveLMSApprox(points=points, degree=3, nCtl=4)
+writeTecplot(curve2, "curve2.dat")
 
 # Get the minimum distance distance between a point and each curve
-x0 = [4, 4, 3]
-s1, D1 = curve1.projectPoint(x0, s=0.5)
-val1 = curve1(s1)  # Closest point on curve
-s2, D2 = curve2.projectPoint(x0, s=1.0)
-val2 = curve2(s2)  # Closest point on curve
+x0 = np.array([4, 4, 3])
+u1, d1 = pointCurve(x0, curve1, nIter=10, tol=1e-10, u=0.5)
+val1 = curve1(u1)  # Closest point on curve1
+
+u2, d2 = pointCurve(x0, curve2, nIter=10, tol=1e-10, u=1.0)
+val2 = curve2(u2)  # Closest point on curve2
 
 # Output the data
 f = open("projections.dat", "w")

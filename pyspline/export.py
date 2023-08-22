@@ -1,3 +1,6 @@
+# Standard Python modules
+from typing import List, Optional, TextIO
+
 # External modules
 import numpy as np
 
@@ -6,7 +9,13 @@ from .bspline import BSplineCurve, BSplineSurface
 from .customTypes import GEOTYPE
 
 
-def writeTecplot1D(handle, name, data, solutionTime=None):
+def writeTecplot1D(
+    handle: TextIO,
+    name: str,
+    data: np.ndarray,
+    variables: List[str] = ["CoordinateX", "CoordinateY", "CoordinateZ"],
+    solution_time: Optional[int] = None,
+):
     """A Generic function to write a 1D data zone to a tecplot file.
     Parameters
     ----------
@@ -16,23 +25,31 @@ def writeTecplot1D(handle, name, data, solutionTime=None):
         Name of the zone to use
     data : array of size (N, ndim)
         1D array of data to write to file
-    SolutionTime : float
+    solution_time : float
         Solution time to write to the file. This could be a fictitious time to
         make visualization easier in tecplot.
     """
-    nx = data.shape[0]
+    ni = data.shape[0]
     ndim = data.shape[1]
-    handle.write('Zone T="%s" I=%d\n' % (name, nx))
-    if solutionTime is not None:
-        handle.write("SOLUTIONTIME=%f\n" % (solutionTime))
-    handle.write("DATAPACKING=POINT\n")
-    for i in range(nx):
+
+    if len(variables) != ndim:
+        raise ValueError("The length of the variables must equal the dimensionality of the data.")
+
+    _writeTecplotHeader(handle, name, solution_time, variables, ni)
+
+    for i in range(ni):
         for idim in range(ndim):
-            handle.write("%f " % (data[i, idim]))
+            handle.write(f"{data[i, idim]} ")
         handle.write("\n")
 
 
-def writeTecplot2D(handle, name, data, solutionTime=None):
+def writeTecplot2D(
+    handle: TextIO,
+    name: str,
+    data: np.ndarray,
+    variables: List[str] = ["CoordinateX", "CoordinateY", "CoordinateZ"],
+    solution_time=None,
+):
     """A Generic function to write a 2D data zone to a tecplot file.
     Parameters
     ----------
@@ -46,21 +63,29 @@ def writeTecplot2D(handle, name, data, solutionTime=None):
         Solution time to write to the file. This could be a fictitious time to
         make visualization easier in tecplot.
     """
-    nx = data.shape[0]
-    ny = data.shape[1]
+    ni = data.shape[0]
+    nj = data.shape[1]
     ndim = data.shape[2]
-    handle.write('Zone T="%s" I=%d J=%d\n' % (name, nx, ny))
-    if solutionTime is not None:
-        handle.write("SOLUTIONTIME=%f\n" % (solutionTime))
-    handle.write("DATAPACKING=POINT\n")
-    for j in range(ny):
-        for i in range(nx):
+
+    if len(variables) != ndim:
+        raise ValueError("The length of the variables must equal the dimensionality of the data.")
+
+    _writeTecplotHeader(handle, name, solution_time, variables, ni, nj)
+
+    for j in range(nj):
+        for i in range(ni):
             for idim in range(ndim):
-                handle.write("%20.16g " % (data[i, j, idim]))
+                handle.write(f"{data[i, j, idim]} " % (data[i, j, idim]))
             handle.write("\n")
 
 
-def writeTecplot3D(handle, name, data, solutionTime=None):
+def writeTecplot3D(
+    handle: TextIO,
+    name: str,
+    data: np.ndarray,
+    variables: List[str] = ["CoordinateX", "CoordinateY", "CoordinateZ"],
+    solution_time=None,
+):
     """A Generic function to write a 3D data zone to a tecplot file.
     Parameters
     ----------
@@ -74,56 +99,51 @@ def writeTecplot3D(handle, name, data, solutionTime=None):
         Solution time to write to the file. This could be a fictitious time to
         make visualization easier in tecplot.
     """
-    nx = data.shape[0]
-    ny = data.shape[1]
-    nz = data.shape[2]
+    ni = data.shape[0]
+    nj = data.shape[1]
+    nk = data.shape[2]
     ndim = data.shape[3]
-    handle.write('Zone T="%s" I=%d J=%d K=%d\n' % (name, nx, ny, nz))
-    if solutionTime is not None:
-        handle.write("SOLUTIONTIME=%f\n" % (solutionTime))
-    handle.write("DATAPACKING=POINT\n")
-    for k in range(nz):
-        for j in range(ny):
-            for i in range(nx):
+
+    if len(variables) != ndim:
+        raise ValueError("The length of the variables must equal the dimensionality of the data.")
+
+    _writeTecplotHeader(handle, name, solution_time, variables, ni, nj, nk)
+
+    for k in range(nk):
+        for j in range(nj):
+            for i in range(ni):
                 for idim in range(ndim):
-                    handle.write("%f " % (data[i, j, k, idim]))
+                    handle.write(f"{data[i, j, k, idim]} ")
                 handle.write("\n")
 
 
-def _writeHeader(f, ndim):
-    """Write tecplot zone header depending on spatial dimension"""
-    if ndim == 1:
-        f.write('VARIABLES = "CoordinateX"\n')
-    elif ndim == 2:
-        f.write('VARIABLES = "CoordinateX", "CoordinateY"\n')
-    else:
-        f.write('VARIABLES = "CoordinateX", "CoordinateY", "CoordinateZ"\n')
+def _writeTecplotHeader(
+    handle: TextIO,
+    zone_name: str,
+    solution_time: int,
+    variables: List[str],
+    ni: Optional[int] = None,
+    nj: Optional[int] = None,
+    nk: Optional[int] = None,
+):
+    """Write tecplot variable header"""
+    var_str = ", ".join([f'"{var}"' for var in variables])
+    handle.write(f"VARIABLES = {var_str}\n")
 
+    zone_dim_str = ""
+    if ni is not None:
+        zone_dim_str += f"I={ni} "
+    if nj is not None:
+        zone_dim_str += f"J={nj} "
+    if nk is not None:
+        zone_dim_str += f"K={nk} "
 
-def openTecplot(fileName, ndim):
-    """A Generic function to open a Tecplot file to write spatial data.
+    handle.write(f'Zone T="{zone_name}" {zone_dim_str}\n')
 
-    Parameters
-    ----------
-    fileName : str
-        Tecplot filename. Should have a .dat extension.
-    ndim : int
-        Number of spatial dimensions. Must be 1, 2 or 3.
+    if solution_time is not None:
+        handle.write(f"SOLUTIONTIME={solution_time}\n")
 
-    Returns
-    -------
-    f : file handle
-        Open file handle
-    """
-    f = open(fileName, "w")
-    _writeHeader(f, ndim)
-
-    return f
-
-
-def closeTecplot(f):
-    """Close Tecplot file opened with openTecplot()"""
-    f.close()
+    handle.write("DATAPACKING=POINT\n")
 
 
 def writeSurfaceDirections(surf: BSplineSurface, file: str, isurf: int):
@@ -139,8 +159,6 @@ def writeSurfaceDirections(surf: BSplineSurface, file: str, isurf: int):
 
 
 def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
-    file = openTecplot(fileName, geo.nDim)
-
     # Curve keyword arguments
     curve = kwargs.get("curve", True)
 
@@ -158,27 +176,26 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
     # Compute the postprocessing data (all geo types share this method)
     geo.computeData(recompute=True)
 
-    if isinstance(geo, BSplineCurve):
-        if curve:
-            writeTecplot1D(file, "interpolated", geo.data[:, :3], solutionTime=solutionTime)
-        if control_points:
-            writeTecplot1D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
-            if geo.rational:
-                writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :-1], solutionTime=solutionTime)
-        if orig and geo.X is not None:
-            writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)
-    elif isinstance(geo, BSplineSurface):
-        if surf:
-            writeTecplot2D(file, "interpolated", geo.data[:, :, :3], solutionTime=solutionTime)
-        if control_points:
-            writeTecplot2D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
-            if geo.rational:
-                writeTecplot2D(file, "weighted_cpts", geo.ctrlPntsW[:, :, :-1], solutionTime=solutionTime)
-        if orig and geo.X is not None:
-            writeTecplot2D(file, "orig_data", geo.X, solutionTime=solutionTime)
-        if directions:
-            writeSurfaceDirections(surf, file, 0)
-    else:
-        pass
-
-    closeTecplot(file)
+    with open(fileName, "w") as file:
+        if isinstance(geo, BSplineCurve):
+            if curve:
+                writeTecplot1D(file, "interpolated", geo.data[:, :3], solutionTime=solutionTime)
+            if control_points:
+                writeTecplot1D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
+                if geo.rational:
+                    writeTecplot1D(file, "weighted_cpts", geo.ctrlPntsW[:, :-1], solutionTime=solutionTime)
+            if orig and geo.X is not None:
+                writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)
+        elif isinstance(geo, BSplineSurface):
+            if surf:
+                writeTecplot2D(file, "interpolated", geo.data[:, :, :3], solutionTime=solutionTime)
+            if control_points:
+                writeTecplot2D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
+                if geo.rational:
+                    writeTecplot2D(file, "weighted_cpts", geo.ctrlPntsW[:, :, :-1], solutionTime=solutionTime)
+            if orig and geo.X is not None:
+                writeTecplot2D(file, "orig_data", geo.X, solutionTime=solutionTime)
+            if directions:
+                writeSurfaceDirections(surf, file, 0)
+        else:
+            pass
