@@ -6,8 +6,9 @@ import numpy as np
 from scipy.sparse import csr_matrix, linalg
 
 # Local modules
-from . import libspline, compatibility, projections
+from . import compatibility, libspline
 from . import parametrizations as param
+from . import projections
 from .bspline import BSplineCurve, BSplineSurface
 from .nurbs import NURBSCurve
 from .utils import checkInput, intersect3DLines
@@ -334,6 +335,7 @@ def curveLMSApprox(
     derivPtr: Optional[np.ndarray] = None,
     derivWeights: Optional[np.ndarray] = None,
     paramType: str = "arc",
+    outputPrint: bool = True,
 ) -> BSplineCurve:
     """
     Fit a B-spline curve to a set of input points using a least-mean-squares approach.
@@ -371,6 +373,8 @@ def curveLMSApprox(
         assumed to have a weight of 1.0.
     paramType : str, optional
         The type of parameterization to use for the curve. Default is "arc".
+    outputPrint: bool, optional
+        Flag to turn on/off output printing, by default True
 
     Returns
     -------
@@ -569,12 +573,14 @@ def curveLMSApprox(
 
         currIter += 1
 
-        print(f"Iteration: {currIter:03d} | RMS error: {err:.4e} | Nctl: {nCtl}")
+        if outputPrint:
+            print(f"Iteration: {currIter:03d} | RMS error: {err:.4e} | Nctl: {nCtl}")
 
         if err <= tol or currIter >= maxIter:
-            print(
-                f"Fitting converged in {currIter} iterations with final RMS Error={err:.4%} and {nCtl} control points."
-            )
+            if outputPrint:
+                print(
+                    f"Fitting converged in {currIter} iterations with final RMS Error={err:.4%} and {nCtl} control points."
+                )
             break
         else:
             nCtl += 1
@@ -820,8 +826,8 @@ def surfaceLMSApprox(
         rhs = NT * points[:, :, idim].flatten()
         ctrlPnts[:, :, idim] = solve(rhs).reshape((nCtlu, nCtlv))
 
-    rms = libspline.surfaceparamcorr(uKnotVec, vKnotVec, uDegree, vDegree, U.T, V.T, ctrlPnts.T, points.T)
-    print(f"{rms:.4e}")
+    # rms = libspline.surfaceparamcorr(uKnotVec, vKnotVec, uDegree, vDegree, U.T, V.T, ctrlPnts.T, points.T)
+    # print(f"{rms:.4e}")
 
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)
@@ -907,6 +913,7 @@ def computeKnotVecInterp(u: np.ndarray, nPts: int, degree: int) -> np.ndarray:
     """Generate a knot vector suitible for global curve interpolation using averaging.
 
     This is an implementation of Eq. 9.8 from The NURBS Book by Piegl and Tiller, pg. 365
+
     Parameters
     ----------
     u : np.ndarray

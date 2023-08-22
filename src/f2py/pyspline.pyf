@@ -132,7 +132,7 @@ python module libspline ! in
             integer, optional,intent(in),check(shape(pw, 1) == nctlv),depend(pw) :: nctlv=shape(pw, 1)
             integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
             integer intent(in) :: order
-            real(kind=realtype) dimension(-1 + ndim,1 + order,1 + order),intent(out),depend(order,ndim) :: skl
+            real(kind=realtype) dimension(ndim - 1,1 + order,1 + order),intent(out),depend(order,ndim) :: skl
         end subroutine derivevalsurfacenurbs
         subroutine findspan(u,degree,knotvec,nctl,span) ! in :libspline:findSpan.f90
             use precision

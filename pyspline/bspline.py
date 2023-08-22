@@ -292,8 +292,8 @@ class BSplineSurface(Spline):
         Returns
         -------
         deriv : np.ndarray size (2,3)
-            Spline derivative evaluation at u,vall points u,v. Shape
-            depend on the input.
+            Spline derivative evaluation at u,v. Shape depends on the
+            input.
         """
         if not u.shape == v.shape:
             raise ValueError(f"u and v must have the same shape.  u has shape {u.shape} and v has shape {v.shape}.")
@@ -337,8 +337,8 @@ class BSplineSurface(Spline):
             curve2 = self.edgeCurves[2]
             gPts2 = utils.calculateGrevillePoints(curve2.degree, curve2.nCtl, curve2.knotVec)
 
-            self.uData = utils.calculateInterpolatedGrevillePoints(10, gPts0)
-            self.vData = utils.calculateInterpolatedGrevillePoints(10, gPts2)
+            self.uData = utils.calculateInterpolatedGrevillePoints(3, gPts0)
+            self.vData = utils.calculateInterpolatedGrevillePoints(3, gPts2)
 
             self.V, self.U = np.meshgrid(self.vData, self.uData)
             self.data = self.getValue(self.U, self.V)

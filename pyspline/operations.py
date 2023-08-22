@@ -7,9 +7,9 @@ import numpy as np
 
 # Local modules
 from . import compatibility, libspline, utils
-from .bspline import BSplineCurve, BSplineSurface, BSplineVolume
-from .customTypes import CURVETYPE, GEOTYPE
-from .nurbs import NURBSCurve, NURBSSurface
+from .bspline import BSplineCurve, BSplineSurface
+from .customTypes import CURVETYPE, GEOTYPE, SURFTYPE
+from .nurbs import NURBSCurve
 from .utils import checkInput
 
 
@@ -682,10 +682,10 @@ def reverseCurve(curve: CURVETYPE) -> None:
     """
     if curve.rational:
         curve.ctrlPntsW = curve.ctrlPntsW[::-1, :]
-        curve.knotVec = 1 - curve.ctrlPnts[::-1]
+        curve.knotVec = 1 - curve.knotVec[::-1]
     else:
         curve.ctrlPnts = curve.ctrlPnts[::-1, :]
-        curve.knotVec = 1 - curve.ctrlPnts[::-1]
+        curve.knotVec = 1 - curve.knotVec[::-1]
 
 
 def splitCurve(curve: CURVETYPE, u: float) -> Tuple[CURVETYPE, CURVETYPE]:
@@ -811,3 +811,65 @@ def getSurfaceBasisPt(
     return libspline.getbasisptsurface(
         u, v, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, vals, colInd, iStart, lIndex
     )
+
+
+def reverseSurface(surface: SURFTYPE, param_dir: str = "u"):
+    ctrlPnts = surface.ctrlPntsW if surface.rational else surface.ctrlPnts
+    if param_dir == "u":
+        sKnotVec = surface.uKnotVec.copy()
+        r = len(surface.uKnotVec) - 1
+        p = surface.uDegree
+        for i in range(1, r - 2 * p):
+            sKnotVec[r - p - i] = -surface.uKnotVec[p + i] + surface.uKnotVec[0] + surface.uKnotVec[r]
+
+        Q = np.zeros_like(ctrlPnts)
+        n = surface.nCtlu - 1
+        for i in range(surface.nCtlu):
+            for j in range(surface.nCtlv):
+                Q[i, j] = ctrlPnts[n - i, j]
+
+        if surface.rational:
+            surface.ctrlPntsW = Q
+        else:
+            surface.ctrlPnts = Q
+        surface.uKnotVec = sKnotVec
+
+    elif param_dir == "v":
+        tKnotVec = np.zeros_like(surface.vKnotVec)
+        s = len(surface.vKnotVec) - 1
+        q = surface.vDegree
+        for j in range(1, s - 2 * q):
+            tKnotVec[s - q - j] = -surface.vKnotVec[q + j] + surface.vKnotVec[0] + surface.vKnotVec[s]
+
+        Q = np.zeros_like(ctrlPnts)
+        m = surface.nCtlv - 1
+        for i in range(surface.nCtlu):
+            for j in range(surface.nCtlv):
+                Q[i, j] = ctrlPnts[i, m - j]
+
+        if surface.rational:
+            surface.ctrlPntsW = Q
+        else:
+            surface.ctrlPnts = Q
+        surface.vKnotVec = tKnotVec
+    else:
+        raise ValueError("Surface reversal can only be done for 'u' or 'v' parameters.")
+
+
+def computeSurfaceNormals(u: np.ndarray, v: np.ndarray, surf: SURFTYPE) -> np.ndarray:
+    norm_vecs = np.zeros((len(u), len(v), 3))
+
+    for i, u_val in enumerate(u):
+        for j, v_val in enumerate(v):
+            deriv = surf.getDerivative(u_val, v_val, 1)
+            ds_du = deriv[1, 0]
+            ds_dv = deriv[0, 1]
+
+            norm_vec = np.cross(ds_du, ds_dv)
+
+            if not np.allclose(norm_vec, 0):
+                norm_vec /= np.linalg.norm(norm_vec)
+
+            norm_vecs[i, j] = norm_vec
+
+    return norm_vecs
