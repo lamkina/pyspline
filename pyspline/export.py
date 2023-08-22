@@ -4,10 +4,12 @@ import numpy as np
 # Local modules
 from .bspline import BSplineCurve, BSplineSurface
 from .customTypes import GEOTYPE
+from .operations import computeSurfaceNormals
 
 
 def writeTecplot1D(handle, name, data, solutionTime=None):
     """A Generic function to write a 1D data zone to a tecplot file.
+
     Parameters
     ----------
     handle : file handle
@@ -34,6 +36,7 @@ def writeTecplot1D(handle, name, data, solutionTime=None):
 
 def writeTecplot2D(handle, name, data, solutionTime=None):
     """A Generic function to write a 2D data zone to a tecplot file.
+
     Parameters
     ----------
     handle : file handle
@@ -62,6 +65,7 @@ def writeTecplot2D(handle, name, data, solutionTime=None):
 
 def writeTecplot3D(handle, name, data, solutionTime=None):
     """A Generic function to write a 3D data zone to a tecplot file.
+
     Parameters
     ----------
     handle : file handle
@@ -87,6 +91,40 @@ def writeTecplot3D(handle, name, data, solutionTime=None):
             for i in range(nx):
                 for idim in range(ndim):
                     handle.write("%f " % (data[i, j, k, idim]))
+                handle.write("\n")
+
+
+def writeTecplotNormals(fileName, name, data, solutionTime=None):
+    """A Generic function to write a 2D data zone to a tecplot file.
+
+    Parameters
+    ----------
+    handle : file handle
+        Open file handle
+    name : str
+        Name of the zone to use
+    data : 2D np array of size (nx, ny, ndim)
+        2D array of data to write to file
+    SolutionTime : float
+        Solution time to write to the file. This could be a fictitious time to
+        make visualization easier in tecplot.
+    """
+    handle = open(fileName, "w")
+    nx = data.shape[0]
+    ny = data.shape[1]
+    nz = data.shape[2]
+    ndim = data.shape[3]
+
+    handle.write('VARIABLES = "CoordinateX", "CoordinateY", "CoordinateZ", "NormX", "NormY", "NormZ"\n')
+    handle.write(f'Zone T="{name}" I={nx} J={ny} K={nz}\n')
+    if solutionTime is not None:
+        handle.write(f"SOLUTIONTIME={solutionTime}\n")
+    handle.write("DATAPACKING=POINT\n")
+    for k in range(nz):
+        for j in range(ny):
+            for i in range(nx):
+                for idim in range(ndim):
+                    handle.write("%20.16g " % (data[i, j, k, idim]))
                 handle.write("\n")
 
 
@@ -139,14 +177,14 @@ def writeSurfaceDirections(surf: BSplineSurface, file: str, isurf: int):
 
 
 def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
-    file = openTecplot(fileName, geo.nDim)
-
     # Curve keyword arguments
     curve = kwargs.get("curve", True)
 
     # Surface keyword arguments
     surf = kwargs.get("surf", True)
     directions = kwargs.get("directions", False)
+
+    normals = kwargs.get("normals", False)
 
     # Shared keyword arguments
     control_points = kwargs.get("control_points", True)
@@ -158,6 +196,7 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
     # Compute the postprocessing data (all geo types share this method)
     geo.computeData(recompute=True)
 
+    file = openTecplot(fileName, geo.nDim)
     if isinstance(geo, BSplineCurve):
         if curve:
             writeTecplot1D(file, "interpolated", geo.data[:, :3], solutionTime=solutionTime)
@@ -169,7 +208,15 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             writeTecplot1D(file, "orig_data", geo.X, solutionTime=solutionTime)
     elif isinstance(geo, BSplineSurface):
         if surf:
-            writeTecplot2D(file, "interpolated", geo.data[:, :, :3], solutionTime=solutionTime)
+            if normals:
+                norm_vecs = computeSurfaceNormals(geo.uData, geo.vData, geo)
+                data = np.concatenate((geo.data, norm_vecs), axis=2)
+                data = data.reshape((len(geo.uData), len(geo.vData), 1, 6))
+                fp = fileName.split(".")[0] + "_normals.dat"
+                writeTecplotNormals(fp, "normals", data, solutionTime=solutionTime)
+
+            writeTecplot2D(file, "interpolated", geo.data, solutionTime=solutionTime)
+
         if control_points:
             writeTecplot2D(file, "control_points", geo.ctrlPnts, solutionTime=solutionTime)
             if geo.rational:
@@ -178,6 +225,7 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             writeTecplot2D(file, "orig_data", geo.X, solutionTime=solutionTime)
         if directions:
             writeSurfaceDirections(surf, file, 0)
+
     else:
         pass
 
