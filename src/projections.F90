@@ -62,9 +62,9 @@ subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, u, nCtl, nDim, di
     logical :: flag, cflag, rational
 
     order = degree + 1
-    if ( nDim == 3 ) then
+    if (nDim == 3) then
         rational = .False.
-    else if ( nDim == 4 ) then
+    else if (nDim == 4) then
         rational = .True.
     end if
 
@@ -195,6 +195,216 @@ subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, u, nCtl, nDim, di
 
 end subroutine pointCurve
 
+subroutine curveCurve(knotVec1, degree1, Pw1, knotVec2, degree2, Pw2, nCtl1, nCtl2, nDim, nIter, &
+                      tol, u, t, d)
+
+    !*** DESCRIPTION
+    !
+    !     Written by Gaetan Kenway
+    !
+    !     The function takes the spline defination of a bivariate spline
+    !     surface and determines the u, v positions that minimizes the
+    !     distance between the point and the surface.
+
+    !     Description of Arguments:
+    !     Input:
+    !     knotVec1      - Knot Vector for Curve 1
+    !     degree1      - Order for Curve 1
+    !     Pw1   - Coefficients for Curve 1
+    !     knotVec2      - Knot Vector for Curve 2
+    !     degree2      - Order for Curve 2
+    !     Pw2   - Coefficients for Curve 2
+    !     nCtl1      - Number of coefficients on curve 1
+    !     nCtl2      - Number of coefficients on curve 2
+    !     nIter   - Integer: Maximum number of iterations
+    !     tol     - Real: Tolerance for newton iteration
+    !     u       - Real: Initial guess for parameter on Curve 1
+    !     t       - Real: Initial guess for parameter on Curve 2
+
+    !     Output:
+    !     u       - Real: parameter on Curve 1
+    !     t       - Real: parameter on Curve 2
+    !     d    - Real: Distance between curves
+    !
+
+    use precision
+    implicit none
+
+    ! Input/Output
+    integer, intent(in) :: nCtl1, nCtl2, degree1, degree2, nDim
+    real(kind=realType), intent(in) :: knotVec1(nCtl1 + degree1 + 1), knotVec2(nCtl2 + degree2 + 1)
+    real(kind=realType), intent(in) :: Pw1(nDim, nCtl1), Pw2(nDim, nCtl2)
+    real(kind=realType), intent(inout) :: u, t
+    integer, intent(in) :: nIter
+    real(kind=realType), intent(in) :: tol
+    real(kind=realType), intent(out) :: d(nDim)
+
+    ! Working
+    real(kind=realType) :: val1(nDim), val2(nDim), w1, w2
+    real(kind=realType) :: ck1(nDim, 3), ck2(nDim, 3)
+    integer :: i, m, ii, NLSFail
+    real(kind=realType) :: low(2), high(2), pt(2), R(nDim), ndist
+    real(kind=realType) :: fval, nfval, dist
+    real(kind=realType) :: hessian(2, 2), grad(2), newpt(2), c
+    real(kind=realType) :: pgrad, update(2), step, p_diff
+    logical :: flag, cflag, rational
+
+    if (nDim == 3) then
+        rational = .False.
+    else if (nDim == 4) then
+        rational = .True.
+    end if
+
+    NLSFail = 0
+
+    low(1) = knotVec1(1)
+    low(2) = knotVec2(1)
+    high(1) = knotVec1(nCtl1 + degree1 + 1)
+    high(2) = knotVec2(nCtl2 + degree2 + 1)
+
+    pt(1) = u
+    pt(2) = t
+
+    iteration_loop: do ii = 1, nIter
+
+        if (rational) then
+            call derivEvalCurveNURBS(pt(1), knotVec1, degree1, Pw1, 2, nCtl1, nDim, ck1)
+            call derivEvalCurveNURBS(pt(2), knotVec2, degree2, Pw2, 2, nCtl2, nDim, ck2)
+        else
+            call derivEvalCurve(pt(1), knotVec1, degree1, Pw1, 2, nCtl1, nDim, ck1)
+            call derivEvalCurve(pt(2), knotVec2, degree2, Pw2, 2, nCtl2, nDim, ck2)
+        end if
+
+        ! Distance is R, "function value" fval is what we minimize
+        R = ck1(:, 1) - ck2(:, 1)
+        nDist = NORM2(R)
+        fval = 0.5 * nDist**2
+
+        ! Calculate the Gradient
+        grad(1) = dot_product(R, ck1(:, 2))
+        grad(2) = dot_product(R, -ck2(:, 2))
+
+        ! Calculate the Hessian
+        hessian(1, 1) = dot_product(ck1(:, 2), ck1(:, 2)) + dot_product(R, ck1(:, 3))
+        hessian(1, 2) = dot_product(ck1(:, 2), -ck2(:, 2))
+        hessian(2, 1) = hessian(1, 2)
+        hessian(2, 2) = dot_product(-ck2(:, 2), -ck2(:, 2)) + dot_product(R, -ck2(:, 3))
+
+        ! Bounds Checking
+        do i = 1, 2
+            flag = .False.
+            if (pt(i) < low(i) + tol .and. grad(i) >= 0.0) then
+                flag = .True.
+                pt(i) = low(i)
+            end if
+
+            if (pt(i) > high(i) - tol .and. grad(i) <= 0.0) then
+                flag = .True.
+                pt(i) = high(i)
+            end if
+
+            if (flag) then
+                grad(i) = 0.0
+                hessian(:, i) = 0.0
+                hessian(i, :) = 0.0
+                hessian(i, i) = 1.0
+            end if
+        end do
+
+        ! Zero-cosine check...slightly modifed from The NURBS Book
+        if (NORM2(grad) < tol) then
+            exit iteration_loop
+        end if
+
+        ! Invert the hessian, compute the update and the projected gradient
+        call solve2by2(hessian, grad, update)
+
+        update = -update
+        pgrad = dot_product(update, grad)
+
+        !Check that this is a descent direction -
+        !otherwise use the negative gradient
+        if (pgrad >= 0.0) then
+            update = -grad / NORM2(grad)
+            pgrad = dot_product(update, grad)
+        end if
+
+        step = 1.0
+        nDist = 0.0
+
+        lineloop: do m = 1, nLine
+            newpt = pt + step * update
+            cflag = .False. ! Check if the constraints are applied
+            ! Check if the new point exceeds the bounds
+            do i = 1, 2
+                if (newpt(i) > high(i)) then
+                    cflag = .True.
+                    newpt(i) = high(i)
+                else if (newpt(i) < low(i)) then
+                    cflag = .True.
+                    newpt(i) = low(i)
+                end if
+            end do
+
+            ! Re-evaluate new position
+            if (rational) then
+                call evalCurveNURBS(newPt(1), knotVec1, degree1, Pw1, nCtl1, nDim, 1, val1, w1)
+                call evalCurveNURBS(newPt(2), knotVec2, degree2, Pw2, nCtl2, nDim, 1, val2, w2)
+            else
+                call evalCurve(newpt(1), knotVec1, degree1, Pw1, nCtl1, nDim, 1, val1)
+                call evalCurve(newpt(2), knotVec2, degree2, Pw2, nCtl2, nDim, 1, val2)
+            end if
+
+            ! Check if the new function value is lower,
+            ! otherwise adjust the step size
+            R = val1 - val2
+            ndist = NORM2(R)
+            nfval = 0.5 * ndist**2
+
+            ! Check if the new point satisfies the wolfe condition
+            if (nfval < fval + pgrad * wolfe * step) then
+                dist = ndist
+                exit lineloop
+            end if
+
+            ! Calculate the new step length
+            if (cflag) then
+                ! If the constraints are applied - and the new point
+                ! doesn't satisfy the Wolfe conditions, it doesn't make
+                ! sense to apply a quadratic approximation
+                step = 0.25 * step
+            else
+                ! c = nfval - fval - pgrad * step is always positive since
+                ! nfval - fval > pgrad * wolfe * step > pgrad * step
+                c = ((nfval - fval) - pgrad * step)
+                step = -step * step * pgrad / (2.0 * c)
+                ! This update is always less than the original step length
+            end if
+        end do lineloop
+
+        if (m == nLine + 1) then
+            dist = ndist
+            nLSFail = nLSFail + 1
+            if (NLSFail > LSFailMax) then
+                exit Iteration_loop
+            end if
+        else
+            NLSFail = 0
+            ! Check if there has been no change in the coordinates
+            p_diff = NORM2(pt - newpt)
+            if (p_diff < tol) then
+                exit Iteration_loop
+            end if
+        end if
+
+        pt = newpt
+    end do iteration_loop
+
+    u = pt(1)
+    t = pt(2)
+    d = R
+
+end subroutine curveCurve
 
 ! ------------------------------------------------------------------------------------
 !              Globalization Functions

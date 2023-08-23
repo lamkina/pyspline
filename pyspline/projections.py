@@ -40,8 +40,55 @@ def pointVolume():
     pass
 
 
-def curveCurve(curve1: CURVETYPE, curve2: CURVETYPE, nIter, tol: float) -> float:
-    pass
+def curveCurve(curve1: CURVETYPE, curve2: CURVETYPE, nIter, tol: float, u: float = -1, t: float = -1) -> float:
+    """
+    Find the minimum distance between this curve (self) and a
+    second curve passed in (inCurve)
+
+    Parameters
+    ----------
+    curve1 : BSplineCurve or NURBSCurve
+        Base curve for the projection
+    curve2 : BSplineCurve or NURBSCurve
+        Second curve to use
+    nIter : int
+        Maximum number of Newton iterations to perform.
+    tol : float
+        Desired parameter tolerance.
+    u : float
+        Initial guess for curve1 (this curve class)
+    t : float
+        Initial guess for inCurve (curve passed in )
+
+    Returns
+    -------
+    float
+        Parametric position on curve1 (this class)
+    float
+        Parametric position on curve2 (inCurve)
+    float
+        Minimum distance between this curve and inCurve. It
+        is equivalent to ||self(s) - inCurve(t)||_2.
+    """
+    if u < 0 or u > 1 or t < 0 or t > 1:
+        curve1.computeData()
+        curve2.computeData()
+        u, t = libspline.curvecurvestart(curve1.data.T, curve1.uData, curve2.data.T, curve2.uData)
+
+    u, t, d = libspline.curvecurve(
+        curve1.knotVec,
+        curve1.degree,
+        curve1.ctrlPnts.T,
+        curve2.knotVec,
+        curve2.degree,
+        curve2.ctrlPnts.T,
+        nIter,
+        tol,
+        u,
+        t,
+    )
+
+    return u, t, d
 
 
 def curveSurface(curve: CURVETYPE, surface: SURFTYPE, nIter, tol: float):

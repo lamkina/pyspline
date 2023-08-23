@@ -249,6 +249,22 @@ python module libspline ! in
             integer, optional,intent(in),check(shape(pw,0)==ndim),depend(pw) :: ndim=shape(pw,0)
             real(kind=realtype) dimension(3),intent(out) :: diff
         end subroutine pointcurve
+        subroutine curvecurve(knotvec1,degree1,pw1,knotvec2,degree2,pw2,nctl1,nctl2,ndim,niter,tol,u,t,d) ! in :libspline:projections.F90
+            real(kind=realtype) dimension(nctl1+degree1+1),intent(in),depend(degree1,nctl1) :: knotvec1
+            integer intent(in) :: degree1
+            real(kind=realtype) dimension(ndim,nctl1),intent(in) :: pw1
+            real(kind=realtype) dimension(nctl2+degree2+1),intent(in),depend(degree2,nctl2) :: knotvec2
+            integer intent(in) :: degree2
+            real(kind=realtype) dimension(ndim,nctl2),intent(in),depend(ndim) :: pw2
+            integer, optional,intent(in),check(shape(pw1,1)==nctl1),depend(pw1) :: nctl1=shape(pw1,1)
+            integer, optional,intent(in),check(shape(pw2,1)==nctl2),depend(pw2) :: nctl2=shape(pw2,1)
+            integer, optional,intent(in),check(shape(pw1,0)==ndim),depend(pw1) :: ndim=shape(pw1,0)
+            integer intent(in) :: niter
+            real(kind=realtype) intent(in) :: tol
+            real(kind=realtype) intent(in,out) :: u
+            real(kind=realtype) intent(in,out) :: t
+            real(kind=realtype) dimension(ndim),intent(out),depend(ndim) :: d
+        end subroutine curvecurve
         subroutine pointcurvestart(points,u,data,nu,ndim,n,uguess) ! in :libspline:projections.F90
             use precision
             real(kind=realtype) dimension(ndim,n),intent(in) :: points
@@ -259,6 +275,17 @@ python module libspline ! in
             integer, optional,intent(in),check(shape(points, 1) == n),depend(points) :: n=shape(points, 1)
             real(kind=realtype) dimension(n),intent(out),depend(n) :: uguess
         end subroutine pointcurvestart
+        subroutine curvecurvestart(data1,uu1,data2,uu2,nu1,nu2,ndim,s1,s2) ! in :libspline:projections.F90
+            real(kind=realtype) dimension(ndim,nu1),intent(in) :: data1
+            real(kind=realtype) dimension(nu1),intent(in),depend(nu1) :: uu1
+            real(kind=realtype) dimension(ndim,nu2),intent(in),depend(ndim) :: data2
+            real(kind=realtype) dimension(nu2),intent(in),depend(nu2) :: uu2
+            integer, optional,intent(in),check(shape(data1,1)==nu1),depend(data1) :: nu1=shape(data1,1)
+            integer, optional,intent(in),check(shape(data2,1)==nu2),depend(data2) :: nu2=shape(data2,1)
+            integer, optional,intent(in),check(shape(data1,0)==ndim),depend(data1) :: ndim=shape(data1,0)
+            real(kind=realtype) intent(out) :: s1
+            real(kind=realtype) intent(out) :: s2
+        end subroutine curvecurvestart
     end interface
 end python module libspline
 

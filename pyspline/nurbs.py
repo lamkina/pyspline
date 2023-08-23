@@ -32,7 +32,7 @@ class NURBSCurve(BSplineCurve):
 
     @property
     def nDim(self) -> int:
-        return self.ctrlPntsW.shape[1]
+        return self.ctrlPnts.shape[1]
 
     @property
     def ctrlPnts(self) -> np.ndarray:
@@ -80,7 +80,7 @@ class NURBSCurve(BSplineCurve):
 
         vals, _ = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
 
-        return vals.squeeze().T[:3] if np.ndim(vals.squeeze().T) == 1 else vals.squeeze().T[:, :3]
+        return vals.squeeze().T[:3] if np.ndim(vals.squeeze().T) == 1 else vals.squeeze().T[:, : self.nDim]
 
     def getWeight(self, u: Union[np.ndarray, float]) -> np.ndarray:
         """

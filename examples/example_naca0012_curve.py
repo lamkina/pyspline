@@ -13,7 +13,7 @@ x, y = np.loadtxt("naca0012", unpack=True)
 points = np.column_stack((x, y))
 
 # Fit a BSpline to the airfoil data
-airfoil = curveLMSApprox(points=points, degree=3, nCtl=11)
+airfoil = curveLMSApprox(points=points, degree=3, nCtl=11, maxIter=100, tol=1e-6, nParamIters=500)
 
 # Export the airfoil
 writeTecplot(airfoil, "naca_data.dat")

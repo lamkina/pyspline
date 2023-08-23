@@ -328,6 +328,7 @@ def curveLMSApprox(
     degree: int,
     nCtl: int,
     maxIter: int = 1,
+    nParamIters: int = 10,
     tol: float = 0.01,
     u: Optional[np.ndarray] = None,
     weights: Optional[np.ndarray] = None,
@@ -353,6 +354,8 @@ def curveLMSApprox(
         limit is reached.
     maxIter : int, optional
         The number of iterations to use in the fitting process. Default is 1.
+    nParamIters: int, optional
+        The number of Hoschek parameteric correction iteration to run, Default is 10.
     tol : float, optional
         The tolerance of the LMS fitting process. Tighter tolerances generally mean more control points
         are necessary to reduce the rms error.
@@ -507,64 +510,65 @@ def curveLMSApprox(
 
         length = libspline.polylength(points.T)
 
-        # Update the constrained and unconstrained parametric coordinates
-        # based on the interpolation weights
-        us = u[sMask]
-        ut = u[tMask]
+        for _i in range(nParamIters):
+            # Update the constrained and unconstrained parametric coordinates
+            # based on the interpolation weights
+            us = u[sMask]
+            ut = u[tMask]
 
-        # Update the constrained and uncontrained parameteric coordinates
-        # based on the derivative weights
-        if deriv is not None:
-            uds = u[derivPtr][sderivMask]
-            udt = u[derivPtr][tderivMask]
+            # Update the constrained and uncontrained parameteric coordinates
+            # based on the derivative weights
+            if deriv is not None:
+                uds = u[derivPtr][sderivMask]
+                udt = u[derivPtr][tderivMask]
 
-        libspline.buildcurvecoeffmatrix(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
-        NTWN = (N.transpose() * W * N).tocsc()
+            libspline.buildcurvecoeffmatrix(us, uds, knotVec, degree, nCtl, nVals, nRowPtr, nColInd)
+            NTWN = (N.transpose() * W * N).tocsc()
 
-        # Check if we are doing unconstrained LMS
-        if nt + nudt == 0:
-            solve = linalg.factorized(NTWN)
-            for idim in range(nDim):
-                ctrlPnts[:, idim] = solve(N.transpose() * W * S[:, idim])
+            # Check if we are doing unconstrained LMS
+            if nt + nudt == 0:
+                solve = linalg.factorized(NTWN)
+                for idim in range(nDim):
+                    ctrlPnts[:, idim] = solve(N.transpose() * W * S[:, idim])
 
-        # More complicated because we have constraints
-        # *** Only works with scipy sparse matrices ***
-        else:
-            mVals = np.zeros((nt + nudt) * order)
-            mRowPtr = np.zeros(nt + nudt + 1, "intc")
-            mColInd = np.zeros((nt + nudt) * order, "intc")
+            # More complicated because we have constraints
+            # *** Only works with scipy sparse matrices ***
+            else:
+                mVals = np.zeros((nt + nudt) * order)
+                mRowPtr = np.zeros(nt + nudt + 1, "intc")
+                mColInd = np.zeros((nt + nudt) * order, "intc")
 
-            libspline.buildcurvecoeffmatrix(ut, udt, knotVec, degree, nCtl, mVals, mRowPtr, mColInd)
-            M = csr_matrix((mVals, mColInd, mRowPtr), (nt + nudt, nCtl))
+                libspline.buildcurvecoeffmatrix(ut, udt, knotVec, degree, nCtl, mVals, mRowPtr, mColInd)
+                M = csr_matrix((mVals, mColInd, mRowPtr), (nt + nudt, nCtl))
 
-            # Now we must assemble the constrained jacobian
-            # [ N^T*W*T      M^T][P] = [ N^T*W*S]
-            # [ M            0  ][R]   [ T      ]
+                # Now we must assemble the constrained jacobian
+                # [ N^T*W*T      M^T][P] = [ N^T*W*S]
+                # [ M            0  ][R]   [ T      ]
 
-            MT = M.transpose().tocsr()
+                MT = M.transpose().tocsr()
 
-            jVal, jColInd, jRowPtr = libspline.buildcurveconjac(
-                NTWN.data,
-                NTWN.indptr,
-                NTWN.indices,
-                MT.data,
-                MT.indptr,
-                MT.indices,
-                M.data,
-                M.indptr,
-                M.indices,
-                nCtl,
-            )
+                jVal, jColInd, jRowPtr = libspline.buildcurveconjac(
+                    NTWN.data,
+                    NTWN.indptr,
+                    NTWN.indices,
+                    MT.data,
+                    MT.indptr,
+                    MT.indices,
+                    M.data,
+                    M.indptr,
+                    M.indices,
+                    nCtl,
+                )
 
-            # Create sparse csr matrix and factorize
-            J = csr_matrix((jVal, jColInd, jRowPtr), (nCtl + nt + nudt, nCtl + nt + nudt)).tocsc()
-            solve = linalg.factorized(J)
-            for idim in range(nDim):
-                rhs = np.hstack((N.transpose() * W * S[:, idim], T[:, idim]))
-                ctrlPnts[:, idim] = solve(rhs)[0:nCtl]
+                # Create sparse csr matrix and factorize
+                J = csr_matrix((jVal, jColInd, jRowPtr), (nCtl + nt + nudt, nCtl + nt + nudt)).tocsc()
+                solve = linalg.factorized(J)
+                for idim in range(nDim):
+                    rhs = np.hstack((N.transpose() * W * S[:, idim], T[:, idim]))
+                    ctrlPnts[:, idim] = solve(rhs)[0:nCtl]
 
-        # Run the parameteric correction
-        libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
+            # Run the parameteric correction
+            libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
 
         err = 0.0
         for idim in range(nDim):
@@ -733,7 +737,7 @@ def surfaceLMSApprox(
         The array of v parameter values, with shape (nv,). If not provided,
         the parameter values will be computed, by default None.
     nIter : Optional[int]
-        The number of iterations to use in the koscheck parameter correction, by default 1.
+        The number of iterations to use in the Hoscheck parameter correction, by default 1.
 
     Returns
     -------
@@ -826,8 +830,8 @@ def surfaceLMSApprox(
         rhs = NT * points[:, :, idim].flatten()
         ctrlPnts[:, :, idim] = solve(rhs).reshape((nCtlu, nCtlv))
 
-    # rms = libspline.surfaceparamcorr(uKnotVec, vKnotVec, uDegree, vDegree, U.T, V.T, ctrlPnts.T, points.T)
-    # print(f"{rms:.4e}")
+    rms = libspline.surfaceparamcorr(uKnotVec, vKnotVec, uDegree, vDegree, U.T, V.T, ctrlPnts.T, points.T)
+    print(f"{rms:.4e}")
 
     # Create the BSpline surface
     surface = BSplineSurface(uDegree, vDegree, ctrlPnts, uKnotVec, vKnotVec)

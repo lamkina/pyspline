@@ -2,7 +2,7 @@
 import numpy as np
 
 # First party modules
-from pyspline.export import writeTecplot
+from pyspline.export import writeTecplot, writeTecplot1D
 from pyspline.fitting import curveLMSApprox
 from pyspline.projections import curveCurve, pointCurve
 
@@ -32,25 +32,18 @@ val1 = curve1(u1)  # Closest point on curve1
 u2, d2 = pointCurve(x0, curve2, nIter=10, tol=1e-10, u=1.0)
 val2 = curve2(u2)  # Closest point on curve2
 
-# Output the data
-f = open("projections.dat", "w")
-f.write('VARIABLES = "X", "Y","Z"\n')
-f.write("Zone T=curve1_proj I=2 \n")
-f.write("DATAPACKING=POINT\n")
-f.write("%f %f %f\n" % (x0[0], x0[1], x0[2]))
-f.write("%f %f %f\n" % (val1[0], val1[1], val1[2]))
+with open("projections.dat", "w") as file:
+    data = np.row_stack((x0, val1))
+    writeTecplot1D(file, "curve1_proj", data)
 
-f.write("Zone T=curve2_proj I=2 \n")
-f.write("DATAPACKING=POINT\n")
-f.write("%f %f %f\n" % (x0[0], x0[1], x0[2]))
-f.write("%f %f %f\n" % (val2[0], val2[1], val2[2]))
+    data = np.row_stack((x0, val2))
+    writeTecplot1D(file, "curve2_prof", data)
 
 # Get the minimum distance between the two curves
-s, t, D = curve1.projectCurve(curve2)
+s, t, D = curveCurve(curve1, curve2, 10, 1e-6)
 val1 = curve1(s)
 val2 = curve2(t)
 
-f.write("Zone T=curve1_curve2 I=2 \n")
-f.write("DATAPACKING=POINT\n")
-f.write("%f %f %f\n" % (val1[0], val1[1], val1[2]))
-f.write("%f %f %f\n" % (val2[0], val2[1], val2[2]))
+with open("projections.dat", "a") as file:
+    data = np.row_stack((val1, val2))
+    writeTecplot1D(file, "curve1_curve2", data)
