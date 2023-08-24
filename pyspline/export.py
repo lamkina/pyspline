@@ -1,12 +1,12 @@
 # Standard Python modules
-from typing import List, Optional, TextIO
+from typing import List, Optional, TextIO, Tuple
 
 # External modules
 import numpy as np
 
 # Local modules
 from .bspline import BSplineCurve, BSplineSurface
-from .customTypes import GEOTYPE, SURFTYPE
+from .customTypes import CURVETYPE, GEOTYPE, SURFTYPE
 from .operations import computeSurfaceNormals
 
 
@@ -258,3 +258,229 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
                 writeSurfaceDirections(surf, file, 0)
         else:
             pass
+
+
+def _writeIGESDirectoryCurve(curve: CURVETYPE, handle: TextIO, Dcount: int, Pcount: int, twoD=False) -> Tuple[int, int]:
+    """
+    Write the IGES file header information (Directory Entry Section)
+    for this curve.
+
+    DO NOT MODIFY ANYTHING HERE UNLESS YOU KNOW **EXACTLY** WHAT
+    YOU ARE DOING!
+
+    """
+
+    if curve.nDim != 3:
+        raise ValueError("Must have 3 dimensions to write to IGES file")
+
+    paraEntries = 6 + len(curve.knotVec) + curve.nCtl + 3 * curve.nCtl + 5
+
+    paraLines = (paraEntries - 11) // 3 + 2
+    if np.mod(paraEntries - 11, 3) != 0:
+        paraLines += 1
+    if twoD:
+        handle.write("     126%8d       0       0       1       0       0       001010501D%7d\n" % (Pcount, Dcount))
+        handle.write(
+            "     126       0       2%8d       0                               0D%7d\n" % (paraLines, Dcount + 1)
+        )
+    else:
+        handle.write("     126%8d       0       0       1       0       0       000000001D%7d\n" % (Pcount, Dcount))
+        handle.write(
+            "     126       0       2%8d       0                               0D%7d\n" % (paraLines, Dcount + 1)
+        )
+
+    Dcount += 2
+    Pcount += paraLines
+
+    return Pcount, Dcount
+
+
+def _writeIGESParameters(curve: CURVETYPE, handle: TextIO, Pcount: int, counter: int):
+    """Write the IGES parameter information for this curve.
+
+    DO NOT MODIFY ANYTHING HERE UNLESS YOU KNOW **EXACTLY** WHAT
+    YOU ARE DOING!
+    """
+    handle.write(
+        "%10d,%10d,%10d,0,0,0,0,                        %7dP%7d\n"
+        % (126, curve.nCtl - 1, curve.degree, Pcount, counter)
+    )
+    counter += 1
+    pos_counter = 0
+
+    for i in range(len(curve.knotVec)):
+        pos_counter += 1
+        handle.write("%20.12g," % (np.real(curve.knotVec[i])))
+        if np.mod(pos_counter, 3) == 0:
+            handle.write("  %7dP%7d\n" % (Pcount, counter))
+            counter += 1
+            pos_counter = 0
+
+    for _i in range(curve.nCtl):
+        pos_counter += 1
+        handle.write("%20.12g," % (1.0))
+        if np.mod(pos_counter, 3) == 0:
+            handle.write("  %7dP%7d\n" % (Pcount, counter))
+            counter += 1
+            pos_counter = 0
+
+    for i in range(curve.nCtl):
+        for idim in range(3):
+            pos_counter += 1
+            handle.write("%20.12g," % (np.real(curve.ctrlPnts[i, idim])))
+            if np.mod(pos_counter, 3) == 0:
+                handle.write("  %7dP%7d\n" % (Pcount, counter))
+                counter += 1
+                pos_counter = 0
+    if pos_counter == 1:
+        handle.write("%s    %7dP%7d\n" % (" " * 40, Pcount, counter))
+        counter += 1
+    elif pos_counter == 2:
+        handle.write("%s    %7dP%7d\n" % (" " * 20, Pcount, counter))
+        counter += 1
+
+    # Ouput the ranges
+    handle.write("%20.12g,%20.12g,0.0,0.0,0.0;         " % (np.min(curve.knotVec), np.max(curve.knotVec)))
+    handle.write("  %7dP%7d\n" % (Pcount, counter))
+    counter += 1
+    Pcount += 2
+
+    return Pcount, counter
+
+
+def _writeIGESDirectorySurf(surf: SURFTYPE, handle: TextIO, Dcount: int, Pcount: int):
+    """
+    Write the IGES file header information (Directory Entry Section)
+    for this surface
+    """
+    # A simpler calc based on cmlib definitions The 13 is for the
+    # 9 parameters at the start, and 4 at the end. See the IGES
+    # 5.3 Manual paraEntries = 13 + Knotsu + Knotsv + Weights +
+    # control points
+    if surf.nDim != 3:
+        raise ValueError("Must have 3 dimensions to write to IGES file")
+    paraEntries = (
+        13 + (len(surf.uKnotVec)) + (len(surf.vKnotVec)) + surf.nCtlu * surf.nCtlv + 3 * surf.nCtlu * surf.nCtlv + 1
+    )
+
+    paraLines = (paraEntries - 10) // 3 + 2
+    if np.mod(paraEntries - 10, 3) != 0:
+        paraLines += 1
+
+    # handle.write("1H,,1H$,1H.,1H,,1H$,16HSTANDARD,1.0,1.0,2HM,0.001,0,0,2HMM,1.0,0\n")
+    handle.write("     128%8d       0       0       1       0       0       000000001D%7d\n" % (Pcount, Dcount))
+    handle.write("     128       0       2%8d       0                               0D%7d\n" % (paraLines, Dcount + 1))
+    Dcount += 2
+    Pcount += paraLines
+
+    return Pcount, Dcount
+
+
+def _writeIGESParametersSurf(surf: SURFTYPE, handle: TextIO, Pcount: int, counter: int):
+    """
+    Write the IGES parameter information for this surface
+    """
+    handle.write(
+        "%10d,%10d,%10d,%10d,%10d,          %7dP%7d\n"
+        % (128, surf.nCtlu - 1, surf.nCtlv - 1, surf.uDegree, surf.vDegree, Pcount, counter)
+    )
+    counter += 1
+    handle.write("%10d,%10d,%10d,%10d,%10d,          %7dP%7d\n" % (0, 0, 1, 0, 0, Pcount, counter))
+
+    counter += 1
+    pos_counter = 0
+
+    for i in range(len(surf.uKnotVec)):
+        pos_counter += 1
+        handle.write("%20.12g," % (np.real(surf.uKnotVec[i])))
+        if np.mod(pos_counter, 3) == 0:
+            handle.write("  %7dP%7d\n" % (Pcount, counter))
+            counter += 1
+            pos_counter = 0
+        # end if
+    # end for
+
+    for i in range(len(surf.vKnotVec)):
+        pos_counter += 1
+        handle.write("%20.12g," % (np.real(surf.vKnotVec[i])))
+        if np.mod(pos_counter, 3) == 0:
+            handle.write("  %7dP%7d\n" % (Pcount, counter))
+            counter += 1
+            pos_counter = 0
+        # end if
+    # end for
+
+    for _i in range(surf.nCtlu * surf.nCtlv):
+        pos_counter += 1
+        handle.write("%20.12g," % (1.0))
+        if np.mod(pos_counter, 3) == 0:
+            handle.write("  %7dP%7d\n" % (Pcount, counter))
+            counter += 1
+            pos_counter = 0
+        # end if
+    # end for
+
+    for j in range(surf.nCtlv):
+        for i in range(surf.nCtlu):
+            for idim in range(3):
+                pos_counter += 1
+                handle.write("%20.12g," % (np.real(surf.ctrlPnts[i, j, idim])))
+                if np.mod(pos_counter, 3) == 0:
+                    handle.write("  %7dP%7d\n" % (Pcount, counter))
+                    counter += 1
+                    pos_counter = 0
+                # end if
+            # end for
+        # end for
+    # end for
+
+    # Ouput the ranges
+    for i in range(4):
+        pos_counter += 1
+        if i == 0:
+            handle.write("%20.12g," % (np.real(np.min(surf.uKnotVec))))
+        if i == 1:
+            handle.write("%20.12g," % (np.real(np.max(surf.uKnotVec))))
+        if i == 2:
+            handle.write("%20.12g," % (np.real(np.min(surf.vKnotVec))))
+        if i == 3:
+            # semi-colon for the last entity
+            handle.write("%20.12g;" % (np.real(np.max(surf.vKnotVec))))
+        if np.mod(pos_counter, 3) == 0:
+            handle.write("  %7dP%7d\n" % (Pcount, counter))
+            counter += 1
+            pos_counter = 0
+        else:  # We have to close it up anyway
+            if i == 3:
+                for _j in range(3 - pos_counter):
+                    handle.write("%21s" % (" "))
+                # end for
+                pos_counter = 0
+                handle.write("  %7dP%7d\n" % (Pcount, counter))
+                counter += 1
+            # end if
+        # end if
+    # end for
+
+    Pcount += 2
+
+    return Pcount, counter
+
+
+def _writeCurveIGES(handle: TextIO, curve: CURVETYPE) -> None:
+    Pcount, Dcount = _writeIGESDirectoryCurve(curve, handle, 1, 1)
+    Pcount, counter = _writeIGESParameters(curve, handle, Pcount, 1)
+
+
+def _writeSurfaceIGES(handle: TextIO, surf: SURFTYPE) -> None:
+    Pcount, Dcount = _writeIGESDirectorySurf(surf, handle, 1, 1)
+    Pcount, counter = _writeIGESParametersSurf(surf, handle, Pcount, 1)
+
+
+def writeIGES(fileName: str, geo: GEOTYPE):
+    with open(fileName, "w") as file:
+        if isinstance(geo, BSplineCurve):
+            _writeCurveIGES(file, geo)
+
+        elif isinstance(geo, BSplineSurface):
+            _writeSurfaceIGES(file, geo)
