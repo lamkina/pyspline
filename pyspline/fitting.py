@@ -328,7 +328,7 @@ def curveLMSApprox(
     degree: int,
     nCtl: int,
     maxIter: int = 1,
-    nParamIters: int = 10,
+    nParamIters: int = 1,
     tol: float = 0.01,
     u: Optional[np.ndarray] = None,
     weights: Optional[np.ndarray] = None,
@@ -568,7 +568,7 @@ def curveLMSApprox(
                     ctrlPnts[:, idim] = solve(rhs)[0:nCtl]
 
             # Run the parameteric correction
-            libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
+            # libspline.curveparamcorr(knotVec, degree, u, ctrlPnts.T, length, points.T)
 
         err = 0.0
         for idim in range(nDim):
