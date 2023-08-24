@@ -32,7 +32,7 @@ class NURBSCurve(BSplineCurve):
 
     @property
     def nDim(self) -> int:
-        return self.ctrlPnts.shape[1]
+        return self.ctrlPntsW.shape[1]
 
     @property
     def ctrlPnts(self) -> np.ndarray:
