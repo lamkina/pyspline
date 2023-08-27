@@ -1,13 +1,386 @@
 # Standard Python modules
-from typing import List, Optional, TextIO, Tuple
+from datetime import date
+import time
+from typing import List, Optional, TextIO, Tuple, Union
 
 # External modules
 import numpy as np
+
+# First party modules
+from pyspline import __version__
 
 # Local modules
 from .bspline import BSplineCurve, BSplineSurface
 from .customTypes import CURVETYPE, GEOTYPE, SURFTYPE
 from .operations import computeSurfaceNormals
+
+
+class IGESWriter:
+    def __init__(self, fileName: str, geoList: List[Union[CURVETYPE, SURFTYPE]], units: str = "m"):
+        self.geoList = geoList
+        if not self._validateGeometry():
+            raise ValueError("One or more of the geometry inputs is not a valid geometry type.")
+
+        self.geoInfo = self._classifyGeometry()
+
+        self.m1 = 73  # First right margin
+        self.m2 = 80  # Second right margin
+
+        # Validate the units
+        unitMap = {
+            "inch": 1,
+            "mm": 2,
+            "ft": 4,
+            "mi": 5,
+            "m": 6,
+            "km": 7,
+            "mils": 8,
+            "micron": 9,
+            "cm": 10,
+            "microinch": 11,
+        }
+        if units.lower() in unitMap.keys():
+            self.unitName = units.capitalize()
+            self.unitIdx = unitMap[units.lower()]
+        else:
+            raise ValueError(
+                f"Unit input ({units}) was not found in the set of allowed units: {[key for key in unitMap.keys()]}."
+            )
+
+        # Set the filename
+        self._setFileName(fileName)
+
+        # Store the date
+        self.date = date.today().strftime("%Y-%m-%d")
+        self.timestamp = f"{date.today().strftime('%Y%m%d')}.{time.strftime('%H%M%S')}"
+
+        # Get the maximum coordinate value
+        self.coordMax = np.max(
+            [np.max(geo.ctrlPntsW) if geo.rational else np.max(geo.ctrlPnts) for geo in self.geoList]
+        )
+
+        # Store the parameter and record delimiters
+        self.paramDelim = ","
+        self.recordDelim = ";"
+
+    def _classifyGeometry(self) -> List[Tuple[str]]:
+        geoInfo = []
+        for geo in self.geoList:
+            if isinstance(geo, BSplineCurve):
+                geoType = "NURBSCurve" if geo.rational else "BSplineCurve"
+                geoCode = "126"
+            elif isinstance(geo, BSplineSurface):
+                geoType = "NURBSSurface" if geo.rational else "BSplineSurface"
+                geoCode = "128"
+
+            geoInfo.append((geoType, geoCode))
+
+        return geoInfo
+
+    def _setFileName(self, fileName) -> None:
+        # Determine the filename
+        if fileName.endswith(".iges"):
+            self.fileName = fileName
+        else:
+            if "." in fileName:
+                name, ext = fileName.split(".")
+                if ext == "igs":
+                    print("IGES file format requires '.iges' extension not '.igs'...")
+                    print("File extension will be changed to '.iges'.")
+                    self.fileName = f"{name}.iges"
+                else:
+                    raise ValueError(f"File extension '{ext}' is not valid for IGES files.")
+
+            else:
+                self.fileName = f"{fileName}.iges"
+
+    def _validateGeometry(self) -> bool:
+        result = [isinstance(geo, (BSplineCurve, BSplineSurface)) for geo in self.geoList]
+
+        if all(result):
+            return True
+
+        return False
+
+    def _writeFirstLine(self, handle: TextIO):
+        handle.write(f"{'S':>73}{1:>7}\n")
+
+    def _formatString(self, text: str):
+        nChar = len(text)
+        return f"{nChar}H{text}"
+
+    def _writeGlobalSection(self, handle: TextIO):
+        # Make a list of strings to write in the global section
+        strToWrite = []
+
+        # Append each item to the strings to write list
+        # NOTE: The order in which these are added matters!!  ** Do not change the order **
+        strToWrite.append("")  # Parameter delimiter, empty string means accept default (,) (#1)
+        strToWrite.append("")  # Record delimiter, empty string means accept default (;) (#2)
+        strToWrite.append(self._formatString("pySpline IGES writer"))  # Product ID (#3)
+        strToWrite.append(self._formatString(self.fileName))  # File name (#4)
+        strToWrite.append(self._formatString(f"pySpline version {__version__}"))  # System ID (#5)
+        strToWrite.append(self._formatString("STANDARD"))  # Preprocessor version (#6)
+        strToWrite.append("32")  # Number of binary bits for integer representation (#7)
+        strToWrite.append("308")  # Single precision magnitude (#8)
+        strToWrite.append("15")  # Single precision significance (#9)
+        strToWrite.append("308")  # Double precision magnitude (#10)
+        strToWrite.append("15")  # Dobule precision significance (#11)
+        strToWrite.append("")  # Product identification for the receiver (#12)
+        strToWrite.append(f"1.")  # Model space scale (#13)
+        strToWrite.append(f"{self.unitIdx}")  # Unit flag (#14)
+        strToWrite.append(self._formatString(self.unitName))  # Units (#15)
+        strToWrite.append("1")  # Maximum number of line weight gradiations (#16)
+        strToWrite.append("0.01")  # Size of maximum line width in units (#17)
+        strToWrite.append(self._formatString(self.timestamp))  # Timestamp (#18)
+        strToWrite.append("1E-07")  # Minimum user-intended resolution (#19)
+        strToWrite.append(f"{self.coordMax:.5f}")  # Approximate maximum coordinate value (#20)
+        strToWrite.append("")  # Name of author (#21)
+        strToWrite.append("")  # Author's Organization (#22)
+        strToWrite.append("11")  # IGES version number (#23)
+        strToWrite.append("0")  # Drafting code standard (#24)
+
+        # Loop over the values to format and write lines
+        lineSum = 0
+        lineCount = 1
+        lineText = ""
+        for i, string in enumerate(strToWrite):
+            lineSum += len(string) + 1  # Add 1 for the delimiter
+
+            if lineSum > (self.m1 - 1):
+                # We will be over the limit, write the line
+                handle.write(f"{lineText}{'G':>{self.m1 - len(lineText)}}{lineCount:>{self.m2 - self.m1}}\n")
+
+                # Reset the lineSum
+                lineText = string + ","  # Reset the line text to the previous string
+                lineSum = len(lineText)  # Reset the line sum
+                lineCount += 1  # Increment the line counter
+            else:
+                if i == len(strToWrite) - 1:
+                    # We are at the last element of the list and didn't write yet, so just write what's left
+                    lineText += (
+                        string + self.paramDelim + self.recordDelim
+                    )  # Replace the trailing comma with the record delimiter
+                    handle.write(f"{lineText}{'G':>{self.m1 - len(lineText)}}{lineCount:>{self.m2 - self.m1}}\n")
+
+                lineText += string + ","
+
+    def _getStatusNumber(self, geo: Union[CURVETYPE, SURFTYPE]) -> str:
+        # 00 means entity is to be displayed
+        blankStatus = "00"
+
+        # 00 means entity is independent
+        entitySwitch = "00"
+
+        # 00 means full 3D geometry
+        entityUseFlag = "00"
+
+        # 01 means no previous directory entry attributes will apply
+        hierarchy = "01"
+
+        return blankStatus + entitySwitch + entityUseFlag + hierarchy
+
+    def _getParamCounts(self, geo: Union[CURVETYPE, SURFTYPE]) -> Tuple[int]:
+        if isinstance(geo, BSplineCurve):
+            paramEntries = len(geo.knotVec) + geo.nCtl + (3 * geo.nCtl) + 5
+            paramLines = int(np.ceil(paramEntries / 3)) + 1
+
+        elif isinstance(geo, BSplineSurface):
+            paramEntries = (
+                13 + (len(geo.uKnotVec) + len(geo.vKnotVec)) + geo.nCtlu * geo.nCtlv + 3 * geo.nCtlu * geo.nCtlv + 1
+            )
+            paramLines = (paramEntries - 10) // 3 + 1
+            if np.mod(paramEntries - 10, 3) != 0:
+                paramLines += 1
+        return paramEntries, paramLines
+
+    def _writeDirectoryEntry(self, handle: TextIO) -> Tuple[int]:
+        pCount = 1
+        lineCounter = 1
+        for i, geo in enumerate(self.geoList):
+            entityType = self.geoInfo[i][1]
+            row1 = []
+            row1.append(entityType)  # Entity type number (#1)
+            row1.append(f"{pCount}")  # Parameter data pointer (#2)
+            row1.append("0")  # Structure (#3)
+            row1.append("0")  # Line font pattern, 1 is solid line (#4)
+            row1.append("0")  # Entity level (#5)
+            row1.append("0")  # Viewing options, 0 is equal visibility (#6)
+            row1.append("0")  # Transformation matrix pointer, 0 is no transformations (#7)
+            row1.append("0")  # Label display associativity, 0 is no associativity (#8)
+
+            statusNumber = self._getStatusNumber(geo)
+            row1.append(statusNumber)  # Status number (#9)
+
+            row1Text = ""
+            for string in row1:
+                row1Text += f"{string:>8}"
+
+            row1Text += "D"
+            row1Text += f"{lineCounter:>7}\n"
+            lineCounter += 1
+
+            handle.write(row1Text)
+
+            row2 = []
+            row2.append(entityType)  # Entity type number (#1)
+            row2.append("0")  # Line weight number (#2)
+            row2.append("0")  # Line color number (#3)
+
+            _, paramLines = self._getParamCounts(geo)
+            pCount += paramLines
+            row2.append(f"{paramLines}")  # Parameter line count number (#4)
+            row2.append("0")  # Form number (#5)
+            row2.append(" ")  # Reserved field **not used** (#6)
+            row2.append(" ")  # Reserved field **not used** (#7)
+            row2.append(" ")  # Entity label **not used** (#8)
+            row2.append("0")  # Subscript number (#9)
+
+            row2Text = ""
+            for string in row2:
+                row2Text += f"{string:>8}"
+
+            row2Text += "D"
+            row2Text += f"{lineCounter:>7}\n"
+            lineCounter += 1
+
+            handle.write(row2Text)
+
+        return lineCounter, pCount
+
+    def _writeParameterDataCurve(self, geo: CURVETYPE, handle: TextIO, pCount: int, counter: int):
+        entryCode = 126
+        k = geo.nCtl - 1
+        m = geo.degree
+        n = k - m + 1
+        a = n + (2 * m)
+
+        nDim = geo.nDim - 1 if geo.rational else geo.nDim  # Adjust for homegenous coords if rational
+        prop1 = 0 if geo.nDim > 2 else 1  # nonplanar (always assumed)
+
+        # Check the first and last control points to determine if the curve is open or closed
+        if np.allclose(geo.ctrlPnts[0], geo.ctrlPnts[-1], atol=1e-14):
+            prop2 = 1
+        else:
+            prop2 = 0
+
+        prop3 = 0  # Curve will always be rational
+        prop4 = 0  # Non-periodic (always assumed for now)
+
+        paramText = f"{pCount}P"
+        lineText = f"{entryCode:>8d},{k:>7d},{m:>7d},{prop1:>7d},{prop2:>7d},{prop3:>7d},{prop4:>7d},"
+        lineText += f"{paramText:>{self.m1 - len(lineText)}}{counter:>{self.m2 - self.m1}}\n"
+        handle.write(lineText)
+        counter += 1
+
+        strToWrite = []
+        # Add the knot vector from index 7 to index 7+a (defined above)
+        for knot in geo.knotVec:
+            strToWrite.append(f"{knot:20.12G}")
+
+        # Add the weights from index 8+a to 8+a+k (defined above)
+        if geo.rational:
+            weights = geo.weights
+        else:
+            weights = np.ones(geo.nCtl)  # Weights are array of ones of length nCtl
+
+        for weight in weights:
+            strToWrite.append(f"{weight:20.12G}")
+
+        # Add the control points (x, y, z are written consecutively)
+        # From index 9+a+k to 11+a+4*k (defined above)
+
+        # Get the weighted control points if rational, else just get the regular control points
+        # because the weights will all be equal to one
+        ctrlPnts = geo.ctrlPntsW[:, :-1] if geo.rational else geo.ctrlPnts
+
+        # We need to add a zero y-coordinate to planar curves
+        if nDim < 3:
+            ctrlPnts = np.column_stack((ctrlPnts, np.zeros(geo.nCtl)))
+
+        for i in range(geo.nCtl):
+            for iDim in range(3):
+                strToWrite.append(f"{ctrlPnts[i, iDim]:20.12G}")
+
+        # Get the start and end parameter values (we know these will always be 0 to 1)
+        strToWrite.append(f"{0:20.12g}")
+        strToWrite.append(f"{1:20.12g}")
+
+        # Write the planar normal vector (we dont use these so leave them blank)
+        if prop1 == 1:
+            strToWrite.append(f"{0:20}")
+            strToWrite.append(f"{0:20}")
+            strToWrite.append(f"{1:20}")
+        else:
+            strToWrite.append(f"{' ':20}")
+            strToWrite.append(f"{' ':20}")
+            strToWrite.append(f"{' ':20}")
+
+        # Now we need to write all the data
+        # Loop over the values to format and write lines
+        lineCount = counter
+        currentLine = ""
+        for i, string in enumerate(strToWrite):
+            spaceNeeded = len(string) + 1  # add 1 for the delimiter
+
+            if len(currentLine) + spaceNeeded < 64:
+                if currentLine:
+                    currentLine += ","
+
+                currentLine += string
+
+                if i == len(strToWrite) - 1:
+                    currentLine += ";"
+            else:
+                currentLine += ","
+                handle.write(
+                    f"{currentLine}{paramText:>{self.m1 - len(currentLine)}}{lineCount:>{self.m2 - self.m1}}\n"
+                )
+                lineCount += 1
+                currentLine = string
+
+                if i == len(strToWrite) - 1:
+                    currentLine += ";"
+
+        if currentLine:
+            handle.write(f"{currentLine}{paramText:>{self.m1 - len(currentLine)}}{lineCount:>{self.m2 - self.m1}}\n")
+
+        lineCount += 1
+
+        return lineCount
+
+    def _writeParameterDataSurf(self, handle: TextIO):
+        pass
+
+    def _writeParameterData(self, handle: TextIO):
+        pCount = 1
+        counter = 1
+        for geo in self.geoList:
+            if isinstance(geo, BSplineCurve):
+                counter = self._writeParameterDataCurve(geo, handle, pCount, counter)
+            elif isinstance(geo, BSplineSurface):
+                counter = self._writeParameterDataSurf(handle)
+
+            pCount += 2
+
+        return pCount, counter
+
+    def _writeTerminate(self, handle: TextIO, dCount: int, pCount: int) -> None:
+        sTag = f"S{1:>7}"
+        gTag = f"G{3:>7}"
+        dTag = f"D{dCount-1:>7}"
+        pTag = f"P{pCount-1:>7}"
+        lineText = f"{sTag}{gTag}{dTag}{pTag}"
+        lineText += f"{'T':>{self.m1-len(lineText)}}{1:>{self.m2-self.m1}}"
+        handle.write(lineText)
+
+    def write(self):
+        with open(self.fileName, "w") as file:
+            self._writeFirstLine(file)
+            self._writeGlobalSection(file)
+            dCount, pCount = self._writeDirectoryEntry(file)
+            pCount, counter = self._writeParameterData(file)
+            self._writeTerminate(file, dCount, counter)
 
 
 def writeTecplot1D(
@@ -260,227 +633,13 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             pass
 
 
-def _writeIGESDirectoryCurve(curve: CURVETYPE, handle: TextIO, Dcount: int, Pcount: int, twoD=False) -> Tuple[int, int]:
-    """
-    Write the IGES file header information (Directory Entry Section)
-    for this curve.
+def writeIGES(
+    fileName: str,
+    geo: Union[List[Union[BSplineCurve, BSplineSurface]], Union[BSplineCurve, BSplineSurface]],
+    units: str = "m",
+):
+    if not isinstance(geo, list) and isinstance(geo, (BSplineCurve, BSplineSurface)):
+        geo = [geo]
 
-    DO NOT MODIFY ANYTHING HERE UNLESS YOU KNOW **EXACTLY** WHAT
-    YOU ARE DOING!
-
-    """
-
-    if curve.nDim != 3:
-        raise ValueError("Must have 3 dimensions to write to IGES file")
-
-    paraEntries = 6 + len(curve.knotVec) + curve.nCtl + 3 * curve.nCtl + 5
-
-    paraLines = (paraEntries - 11) // 3 + 2
-    if np.mod(paraEntries - 11, 3) != 0:
-        paraLines += 1
-    if twoD:
-        handle.write("     126%8d       0       0       1       0       0       001010501D%7d\n" % (Pcount, Dcount))
-        handle.write(
-            "     126       0       2%8d       0                               0D%7d\n" % (paraLines, Dcount + 1)
-        )
-    else:
-        handle.write("     126%8d       0       0       1       0       0       000000001D%7d\n" % (Pcount, Dcount))
-        handle.write(
-            "     126       0       2%8d       0                               0D%7d\n" % (paraLines, Dcount + 1)
-        )
-
-    Dcount += 2
-    Pcount += paraLines
-
-    return Pcount, Dcount
-
-
-def _writeIGESParameters(curve: CURVETYPE, handle: TextIO, Pcount: int, counter: int):
-    """Write the IGES parameter information for this curve.
-
-    DO NOT MODIFY ANYTHING HERE UNLESS YOU KNOW **EXACTLY** WHAT
-    YOU ARE DOING!
-    """
-    handle.write(
-        "%10d,%10d,%10d,0,0,0,0,                        %7dP%7d\n"
-        % (126, curve.nCtl - 1, curve.degree, Pcount, counter)
-    )
-    counter += 1
-    pos_counter = 0
-
-    for i in range(len(curve.knotVec)):
-        pos_counter += 1
-        handle.write("%20.12g," % (np.real(curve.knotVec[i])))
-        if np.mod(pos_counter, 3) == 0:
-            handle.write("  %7dP%7d\n" % (Pcount, counter))
-            counter += 1
-            pos_counter = 0
-
-    for _i in range(curve.nCtl):
-        pos_counter += 1
-        handle.write("%20.12g," % (1.0))
-        if np.mod(pos_counter, 3) == 0:
-            handle.write("  %7dP%7d\n" % (Pcount, counter))
-            counter += 1
-            pos_counter = 0
-
-    for i in range(curve.nCtl):
-        for idim in range(3):
-            pos_counter += 1
-            handle.write("%20.12g," % (np.real(curve.ctrlPnts[i, idim])))
-            if np.mod(pos_counter, 3) == 0:
-                handle.write("  %7dP%7d\n" % (Pcount, counter))
-                counter += 1
-                pos_counter = 0
-    if pos_counter == 1:
-        handle.write("%s    %7dP%7d\n" % (" " * 40, Pcount, counter))
-        counter += 1
-    elif pos_counter == 2:
-        handle.write("%s    %7dP%7d\n" % (" " * 20, Pcount, counter))
-        counter += 1
-
-    # Ouput the ranges
-    handle.write("%20.12g,%20.12g,0.0,0.0,0.0;         " % (np.min(curve.knotVec), np.max(curve.knotVec)))
-    handle.write("  %7dP%7d\n" % (Pcount, counter))
-    counter += 1
-    Pcount += 2
-
-    return Pcount, counter
-
-
-def _writeIGESDirectorySurf(surf: SURFTYPE, handle: TextIO, Dcount: int, Pcount: int):
-    """
-    Write the IGES file header information (Directory Entry Section)
-    for this surface
-    """
-    # A simpler calc based on cmlib definitions The 13 is for the
-    # 9 parameters at the start, and 4 at the end. See the IGES
-    # 5.3 Manual paraEntries = 13 + Knotsu + Knotsv + Weights +
-    # control points
-    if surf.nDim != 3:
-        raise ValueError("Must have 3 dimensions to write to IGES file")
-    paraEntries = (
-        13 + (len(surf.uKnotVec)) + (len(surf.vKnotVec)) + surf.nCtlu * surf.nCtlv + 3 * surf.nCtlu * surf.nCtlv + 1
-    )
-
-    paraLines = (paraEntries - 10) // 3 + 2
-    if np.mod(paraEntries - 10, 3) != 0:
-        paraLines += 1
-
-    # handle.write("1H,,1H$,1H.,1H,,1H$,16HSTANDARD,1.0,1.0,2HM,0.001,0,0,2HMM,1.0,0\n")
-    handle.write("     128%8d       0       0       1       0       0       000000001D%7d\n" % (Pcount, Dcount))
-    handle.write("     128       0       2%8d       0                               0D%7d\n" % (paraLines, Dcount + 1))
-    Dcount += 2
-    Pcount += paraLines
-
-    return Pcount, Dcount
-
-
-def _writeIGESParametersSurf(surf: SURFTYPE, handle: TextIO, Pcount: int, counter: int):
-    """
-    Write the IGES parameter information for this surface
-    """
-    handle.write(
-        "%10d,%10d,%10d,%10d,%10d,          %7dP%7d\n"
-        % (128, surf.nCtlu - 1, surf.nCtlv - 1, surf.uDegree, surf.vDegree, Pcount, counter)
-    )
-    counter += 1
-    handle.write("%10d,%10d,%10d,%10d,%10d,          %7dP%7d\n" % (0, 0, 1, 0, 0, Pcount, counter))
-
-    counter += 1
-    pos_counter = 0
-
-    for i in range(len(surf.uKnotVec)):
-        pos_counter += 1
-        handle.write("%20.12g," % (np.real(surf.uKnotVec[i])))
-        if np.mod(pos_counter, 3) == 0:
-            handle.write("  %7dP%7d\n" % (Pcount, counter))
-            counter += 1
-            pos_counter = 0
-        # end if
-    # end for
-
-    for i in range(len(surf.vKnotVec)):
-        pos_counter += 1
-        handle.write("%20.12g," % (np.real(surf.vKnotVec[i])))
-        if np.mod(pos_counter, 3) == 0:
-            handle.write("  %7dP%7d\n" % (Pcount, counter))
-            counter += 1
-            pos_counter = 0
-        # end if
-    # end for
-
-    for _i in range(surf.nCtlu * surf.nCtlv):
-        pos_counter += 1
-        handle.write("%20.12g," % (1.0))
-        if np.mod(pos_counter, 3) == 0:
-            handle.write("  %7dP%7d\n" % (Pcount, counter))
-            counter += 1
-            pos_counter = 0
-        # end if
-    # end for
-
-    for j in range(surf.nCtlv):
-        for i in range(surf.nCtlu):
-            for idim in range(3):
-                pos_counter += 1
-                handle.write("%20.12g," % (np.real(surf.ctrlPnts[i, j, idim])))
-                if np.mod(pos_counter, 3) == 0:
-                    handle.write("  %7dP%7d\n" % (Pcount, counter))
-                    counter += 1
-                    pos_counter = 0
-                # end if
-            # end for
-        # end for
-    # end for
-
-    # Ouput the ranges
-    for i in range(4):
-        pos_counter += 1
-        if i == 0:
-            handle.write("%20.12g," % (np.real(np.min(surf.uKnotVec))))
-        if i == 1:
-            handle.write("%20.12g," % (np.real(np.max(surf.uKnotVec))))
-        if i == 2:
-            handle.write("%20.12g," % (np.real(np.min(surf.vKnotVec))))
-        if i == 3:
-            # semi-colon for the last entity
-            handle.write("%20.12g;" % (np.real(np.max(surf.vKnotVec))))
-        if np.mod(pos_counter, 3) == 0:
-            handle.write("  %7dP%7d\n" % (Pcount, counter))
-            counter += 1
-            pos_counter = 0
-        else:  # We have to close it up anyway
-            if i == 3:
-                for _j in range(3 - pos_counter):
-                    handle.write("%21s" % (" "))
-                # end for
-                pos_counter = 0
-                handle.write("  %7dP%7d\n" % (Pcount, counter))
-                counter += 1
-            # end if
-        # end if
-    # end for
-
-    Pcount += 2
-
-    return Pcount, counter
-
-
-def _writeCurveIGES(handle: TextIO, curve: CURVETYPE) -> None:
-    Pcount, Dcount = _writeIGESDirectoryCurve(curve, handle, 1, 1)
-    Pcount, counter = _writeIGESParameters(curve, handle, Pcount, 1)
-
-
-def _writeSurfaceIGES(handle: TextIO, surf: SURFTYPE) -> None:
-    Pcount, Dcount = _writeIGESDirectorySurf(surf, handle, 1, 1)
-    Pcount, counter = _writeIGESParametersSurf(surf, handle, Pcount, 1)
-
-
-def writeIGES(fileName: str, geo: GEOTYPE):
-    with open(fileName, "w") as file:
-        if isinstance(geo, BSplineCurve):
-            _writeCurveIGES(file, geo)
-
-        elif isinstance(geo, BSplineSurface):
-            _writeSurfaceIGES(file, geo)
+    writer = IGESWriter(fileName, geo, units=units)
+    writer.write()

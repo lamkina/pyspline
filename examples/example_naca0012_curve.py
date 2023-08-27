@@ -2,7 +2,8 @@
 import numpy as np
 
 # First party modules
-from pyspline.export import writeTecplot
+from pyspline.bspline import BSplineCurve
+from pyspline.export import writeIGES, writeTecplot
 from pyspline.fitting import curveLMSApprox
 
 # Load naca0012 data
@@ -13,7 +14,9 @@ x, y = np.loadtxt("naca0012", unpack=True)
 points = np.column_stack((x, y))
 
 # Fit a BSpline to the airfoil data
-airfoil = curveLMSApprox(points=points, degree=3, nCtl=11, maxIter=100, tol=1e-6, nParamIters=500)
+airfoil = curveLMSApprox(points=points, degree=3, nCtl=50, maxIter=1, tol=1e-6, nParamIters=1)
+
 
 # Export the airfoil
-writeTecplot(airfoil, "naca_data.dat")
+# writeTecplot(airfoil, "naca_data.dat")
+writeIGES("naca0012.iges", airfoil)
