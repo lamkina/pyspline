@@ -1,5 +1,5 @@
 # Standard Python modules
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 # External modules
 import numpy as np

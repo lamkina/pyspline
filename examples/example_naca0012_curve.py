@@ -15,8 +15,9 @@ points = np.column_stack((x, y))
 
 # Fit a BSpline to the airfoil data
 airfoil = curveLMSApprox(points=points, degree=3, nCtl=50, maxIter=1, tol=1e-6, nParamIters=1)
-
+airfoil2 = curveLMSApprox(points=points, degree=3, nCtl=20, maxIter=1, tol=1e-6, nParamIters=1)
+airfoil2.ctrlPnts = airfoil2.ctrlPnts * 1.5
 
 # Export the airfoil
 # writeTecplot(airfoil, "naca_data.dat")
-writeIGES("naca0012.iges", airfoil)
+writeIGES("naca0012.iges", [airfoil, airfoil2])

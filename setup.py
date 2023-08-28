@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import re
 import os
 
@@ -25,7 +25,7 @@ setup(
     author_email="",
     url="https://github.com/mdolab/pyspline",
     license="Apache License Version 2.0",
-    packages=["pyspline"],
+    packages=find_packages(include=["pyspline*"]),
     package_data={"pyspline": ["*.so"]},
     install_requires=["numpy>=1.16", "scipy>=1.2"],
     extra_requires={
