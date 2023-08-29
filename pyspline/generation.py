@@ -3,11 +3,12 @@ from baseclasses.utils import Error
 import numpy as np
 
 # First party modules
-from pyspline import BSplineCurve, BSplineSurface, BSplineVolume
+from pyspline.bspline import BSplineCurve, BSplineSurface, BSplineVolume
 
 # NOTE: AL, None of the functions in the module are currently working
 # because the call signatures to curves, surfaces, and volumes need to
 # be updated.
+
 
 def trilinearVolume(*args):
     """This is a short-cut function to create a trilinear b-spline

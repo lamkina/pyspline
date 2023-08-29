@@ -6,7 +6,8 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 # First party modules
-from pyspline import BSplineCurve, BSplineSurface, NURBSCurve, NURBSSurface
+from pyspline.bspline import BSplineCurve, BSplineSurface
+from pyspline.nurbs import NURBSCurve, NURBSSurface
 from pyspline.export import writeTecplot
 
 
@@ -214,7 +215,6 @@ class TestNURBSSurface(unittest.TestCase):
             self.surface.vKnotVec = np.array([0, 0, 1 / 2, 0, 1])
 
     def testctrlPnts(self):
-
         assert_allclose(self.surface.ctrlPnts, self.ctrlPnts)
 
         # Test control points of the wrong size

@@ -6,7 +6,8 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 # First party modules
-from pyspline import BSplineCurve, NURBSCurve
+from pyspline.bspline import BSplineCurve
+from pyspline.nurbs import NURBSCurve
 
 
 class TestBSplineCurve(unittest.TestCase):

@@ -269,6 +269,7 @@ def writeIGES(fileName: str, geo: Union[List[GEOTYPE], GEOTYPE], units: str = "m
 
     coordMax, geoList = IGESWriter.preprocess(geo)
     f = IGESWriter.openFile(fileName)
+    IGESWriter.writeFirstLine(f)
     gCount = IGESWriter.writeGlobalSection(f, units, coordMax, **kwargs)
 
     pCount = 1
@@ -278,7 +279,7 @@ def writeIGES(fileName: str, geo: Union[List[GEOTYPE], GEOTYPE], units: str = "m
         if isinstance(geo, BSplineCurve):
             dCount = IGESWriter.writeDirectoryCurve(f, paramLines, pCount, dCount)
         elif isinstance(geo, BSplineSurface):
-            pass
+            dCount = IGESWriter.writeDirectorySurface(f, paramLines, pCount, dCount)
         pCount += paramLines
 
     pCount = 1
@@ -287,7 +288,7 @@ def writeIGES(fileName: str, geo: Union[List[GEOTYPE], GEOTYPE], units: str = "m
         if isinstance(geo, BSplineCurve):
             counter = IGESWriter.writeParametersCurve(f, geo, pCount, counter)
         elif isinstance(geo, BSplineSurface):
-            pass
+            counter = IGESWriter.writeParametersSurface(f, geo, pCount, counter)
         pCount += 2
 
     IGESWriter.writeTerminateEntry(f, gCount, dCount, counter)

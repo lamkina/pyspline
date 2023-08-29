@@ -19,3 +19,6 @@ src/f2py/libspline-f2pywrappers2.f90
 *.rc
 *.cfg
 .vscode/
+*.iges
+*.igs
+*.txt

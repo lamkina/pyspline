@@ -7,8 +7,10 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 # First party modules
-from pyspline import BSplineCurve, BSplineSurface, NURBSCurve, NURBSSurface, operations
+from pyspline import operations
+from pyspline.bspline import BSplineCurve, BSplineSurface
 from pyspline.export import writeTecplot
+from pyspline.nurbs import NURBSCurve, NURBSSurface
 
 
 class TestOperations(unittest.TestCase):

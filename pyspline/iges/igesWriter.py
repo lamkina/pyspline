@@ -106,6 +106,10 @@ class IGESWriter:
         return open(fileName, "w")
 
     @staticmethod
+    def writeFirstLine(handle: TextIO):
+        handle.write(f"{'S':>73}{1:>7}\n")
+
+    @staticmethod
     def preprocess(geoList: List[GEOTYPE]) -> Tuple[float, List[Union[NURBSCurve, NURBSSurface]]]:
         coordMax = 0.0
         for i, geo in enumerate(geoList):
@@ -115,14 +119,14 @@ class IGESWriter:
             if not geo.rational:
                 ctrlPntsW = combineCtrlPnts(geo.ctrlPnts)
 
-            if isinstance(geo, BSplineCurve):
-                newGeo = NURBSCurve(geo.degree, geo.knotVec, ctrlPntsW)
-            elif isinstance(geo, NURBSSurface):
-                newGeo = NURBSSurface(geo.uDegree, geo.vDegree, ctrlPntsW, geo.uKnotVec, geo.vKnotVec)
+                if isinstance(geo, BSplineCurve):
+                    newGeo = NURBSCurve(geo.degree, geo.knotVec, ctrlPntsW)
+                elif isinstance(geo, NURBSSurface):
+                    newGeo = NURBSSurface(geo.uDegree, geo.vDegree, ctrlPntsW, geo.uKnotVec, geo.vKnotVec)
 
-            geoList[i] = newGeo
+                geoList[i] = newGeo
 
-            coordMax = max(coordMax, float(np.max(np.abs(newGeo.ctrlPntsW))))
+            coordMax = max(coordMax, float(np.max(np.abs(geoList[i].ctrlPntsW))))
 
         return coordMax, geoList
 
@@ -134,7 +138,7 @@ class IGESWriter:
 
         elif isinstance(geo, BSplineSurface):
             paramEntries = (
-                (len(geo.uKnotVec) + len(geo.vKnotVec)) + (geo.nCtlu * geo.nCtlv) + (3 * geo.nCtlu * geo.nCtlv) + 9
+                (len(geo.uKnotVec) + len(geo.vKnotVec)) + (geo.nCtlu * geo.nCtlv) + (3 * geo.nCtlu * geo.nCtlv) + 4
             )
             paramLines = int(np.ceil(paramEntries / PARAMCOLS)) + 1
 
@@ -259,7 +263,7 @@ class IGESWriter:
 
     @staticmethod
     def writeParametersCurve(handle: TextIO, geo: NURBSCurve, pCount: int, counter: int):
-        entryCode = 126
+        entityType = 126
         k = geo.nCtl - 1
         m = geo.degree
         n = k - m + 1
@@ -280,7 +284,7 @@ class IGESWriter:
         paramText = f"{pCount}P"
 
         # The first line of the parameter section is specially formatted
-        lineText = f"{entryCode:>8d},{k:>7d},{m:>7d},{prop1:>7d},{prop2:>7d},{prop3:>7d},{prop4:>7d},"
+        lineText = f"{entityType:>8d},{k:>7d},{m:>7d},{prop1:>7d},{prop2:>7d},{prop3:>7d},{prop4:>7d},"
         lineText += f"{paramText:>{MARGIN1 - len(lineText)}}{counter:>{MARGIN2 - MARGIN1}}\n"
         handle.write(lineText)
         counter += 1
@@ -306,7 +310,7 @@ class IGESWriter:
 
         # Get the weighted control points if rational, else just get the regular control points
         # because the weights will all be equal to one
-        ctrlPnts = geo.ctrlPntsW[:, :-1] if geo.rational else geo.ctrlPnts
+        ctrlPnts = geo.ctrlPnts
 
         # We need to add a zero y-coordinate to planar curves
         if nDim <= 2:
@@ -330,6 +334,138 @@ class IGESWriter:
             lines.append(formatParameterValue(0))
             lines.append(formatParameterValue(0))
             lines.append(formatParameterValue(0))
+
+        counter = writeLines(handle, lines=lines, counter=counter, marginText=paramText, margin=PARAMMARGIN)
+
+        return counter
+
+    @staticmethod
+    def writeDirectorySurface(handle: TextIO, paramLines: int, pCount: int, dCount: int) -> int:
+        entityType = 128  # 128 is rational b-spline type
+
+        # Determine the status number
+        blankStatus = "00"  # 00 means entity is to be displayed
+        entitySwitch = "00"  # 00 means entity is independent, 01 mean physically dependent
+        entityUseFlag = "00"  # 00 means full 3D geometry
+        hierarchy = "01"  # 01 means no previous directory entry attributes will apply
+        statusNumber = blankStatus + entitySwitch + entityUseFlag + hierarchy
+
+        row1 = []
+        row1.append(f"{entityType}")  # Entity type number (#1)
+        row1.append(f"{pCount}")  # Parameter data pointer (#2)
+        row1.append("0")  # Structure (#3)
+        row1.append("0")  # Line font pattern, 1 is solid line (#4)
+        row1.append("0")  # Entity level (#5)
+        row1.append("0")  # Viewing options, 0 is equal visibility (#6)
+        row1.append("0")  # Transformation matrix pointer, 0 is no transformations (#7)
+        row1.append("0")  # Label display associativity, 0 is no associativity (#8)
+        row1.append(statusNumber)  # Status number (#9)
+
+        row1Text = ""
+        for string in row1:
+            row1Text += f"{string:>8}"
+
+        row1Text += "D"
+        row1Text += f"{dCount:>7}\n"
+        dCount += 1
+
+        handle.write(row1Text)
+
+        row2 = []
+        row2.append(f"{entityType}")  # Entity type number (#1)
+        row2.append("0")  # Line weight number (#2)
+        row2.append("0")  # Line color number (#3)
+        row2.append(f"{paramLines}")  # Parameter line count number (#4)
+        row2.append("0")  # Form number (#5)
+        row2.append(" ")  # Reserved field **not used** (#6)
+        row2.append(" ")  # Reserved field **not used** (#7)
+        row2.append(" ")  # Entity label **not used** (#8)
+        row2.append("0")  # Subscript number (#9)
+
+        row2Text = ""
+        for string in row2:
+            row2Text += f"{string:>8}"
+
+        row2Text += "D"
+        row2Text += f"{dCount:>7}\n"
+        dCount += 1
+
+        handle.write(row2Text)
+
+        return dCount
+
+    @staticmethod
+    def writeParametersSurface(handle: TextIO, geo: NURBSSurface, pCount: int, counter: int) -> int:
+        entityType = 128
+        k1 = geo.nCtlu - 1
+        k2 = geo.nCtlv - 1
+        m1 = geo.uDegree
+        m2 = geo.vDegree
+
+        edgeCurves = geo.edgeCurves
+        u0Curve = edgeCurves[0]
+        u1Curve = edgeCurves[1]
+        v0Curve = edgeCurves[2]
+        v1Curve = edgeCurves[3]
+
+        # Check if the surface is closed in the u-direction
+        if np.all(np.equal(v0Curve.ctrlPnts, v1Curve.ctrlPnts)):
+            prop1 = 1
+        else:
+            prop1 = 0
+
+        # Check if the surface is closed in the v-direction
+        if np.all(np.equal(u0Curve.ctrlPnts, u1Curve.ctrlPnts)):
+            prop2 = 1
+        else:
+            prop2 = 0
+
+        prop3 = 0 if geo.rational else 1
+
+        prop4 = 0
+        prop5 = 0
+
+        paramText = f"{pCount}P"
+
+        # The first line of the parameter section is specially formatted
+        lineText = f"{entityType:>8d},{k1:>4d},{k2:>4d},{m1:>4d},{m2:>4d},{prop1:>4d},{prop2:>4d},{prop3:>4d},{prop4:>4d},{prop5:>4d},"
+        lineText += f"{paramText:>{MARGIN1 - len(lineText)}}{counter:>{MARGIN2 - MARGIN1}}\n"
+        handle.write(lineText)
+        counter += 1
+
+        lines = []
+        # Add the u-knot vector
+        for knot in geo.uKnotVec:
+            val = formatParameterValue(knot)
+            lines.append(val)
+
+        # Add the v-knot vector
+        for knot in geo.vKnotVec:
+            val = formatParameterValue(knot)
+            lines.append(val)
+
+        # Add the weights
+        weights = geo.weights.reshape((geo.nCtlu, geo.nCtlv))
+        for j in range(geo.nCtlv):
+            for i in range(geo.nCtlu):
+                val = formatParameterValue(weights[i, j])
+                lines.append(val)
+
+        # Add the control points (x, y, z are written consecutively)
+
+        # Get the weighted control points if rational, else just get the regular control points
+        # because the weights will all be equal to one
+        for j in range(geo.nCtlv):
+            for i in range(geo.nCtlu):
+                for iDim in range(3):  # Data should always be 3-dimensional at this point
+                    val = formatParameterValue(geo.ctrlPnts[i, j, iDim])
+                    lines.append(val)
+
+        # Get the start and end parameter values (we know these will always be 0 to 1)
+        lines.append(formatParameterValue(0))
+        lines.append(formatParameterValue(1))
+        lines.append(formatParameterValue(0))
+        lines.append(formatParameterValue(1))
 
         counter = writeLines(handle, lines=lines, counter=counter, marginText=paramText, margin=PARAMMARGIN)
 
