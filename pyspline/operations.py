@@ -496,7 +496,7 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = T
             knot = checkInput(param[1], "param[1]", float, 0)
             rv = checkInput(num[1], "num[1]", int, 0)
 
-            sv = utils.multiplicity(knot, geo.vKnotVec)
+            sv = utils.multiplicity(knot, geo.vKnotVec, geo.nCtlv, geo.vDegree)
 
             if rv > geo.vDegree - sv:
                 raise ValueError(f"Knot {knot} cannot be inserted {rv} times in the u-direction.")
@@ -522,11 +522,12 @@ def insertKnot(geo: GEOTYPE, param: List[float], num: List[int], check: bool = T
                 newCtrlPnts[u, :] = ctrlPntsTemp[:, : geo.nCtlv + rv]
 
             # Set the knot vector and control points
-            geo.vKnotVec = vKnotVecNew
             if geo.rational:
                 geo.ctrlPntsW = newCtrlPnts
             else:
                 geo.ctrlPnts = newCtrlPnts
+
+            geo.vKnotVec = vKnotVecNew
 
     else:
         raise NotImplementedError("Knot insertion is not yet supported for Volumes.")
@@ -835,7 +836,7 @@ def reverseSurface(surface: SURFTYPE, param_dir: str = "u"):
         surface.uKnotVec = sKnotVec
 
     elif param_dir == "v":
-        tKnotVec = np.zeros_like(surface.vKnotVec)
+        tKnotVec = surface.vKnotVec.copy()
         s = len(surface.vKnotVec) - 1
         q = surface.vDegree
         for j in range(1, s - 2 * q):
@@ -851,25 +852,45 @@ def reverseSurface(surface: SURFTYPE, param_dir: str = "u"):
             surface.ctrlPntsW = Q
         else:
             surface.ctrlPnts = Q
+
         surface.vKnotVec = tKnotVec
     else:
         raise ValueError("Surface reversal can only be done for 'u' or 'v' parameters.")
 
 
 def computeSurfaceNormals(u: np.ndarray, v: np.ndarray, surf: SURFTYPE) -> np.ndarray:
-    norm_vecs = np.zeros((len(u), len(v), 3))
+    V, U = np.meshgrid(v, u)
+    # print(V.shape)
+    # print(U.shape)
 
-    for i, u_val in enumerate(u):
-        for j, v_val in enumerate(v):
-            deriv = surf.getDerivative(u_val, v_val, 1)
-            ds_du = deriv[1, 0]
-            ds_dv = deriv[0, 1]
+    # normals_py = np.zeros((len(u), len(v), 3))
 
-            norm_vec = np.cross(ds_du, ds_dv)
+    # for i in range(U.shape[0]):
+    # for j in range(U.shape[1]):
+    # u, v = U[i, j], V[i, j]
+    # print(u, v)
+    # deriv = surf.getDerivative(u, v, 1)
+    # normals_py[i, j] = np.cross(deriv[1, 0], deriv[0, 1])
+    # normals_py[i, j] /= np.linalg.norm(normals_py[i, j])
 
-            if not np.allclose(norm_vec, 0):
-                norm_vec /= np.linalg.norm(norm_vec)
+    if surf.rational:
+        normals_fort = libspline.evalsurfacenormalsnurbs(
+            U.T, V.T, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPntsW.T
+        )
+    else:
+        normals_fort = libspline.evalsurfacenormals(
+            U, V, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPnts.T
+        )
 
-            norm_vecs[i, j] = norm_vec
+    normals_fort = normals_fort.squeeze().T
 
-    return norm_vecs
+    # print(normals_py.squeeze())
+    # print()
+    # print(normals_fort)
+
+    # for i in range(len(U)):
+    #     for j in range(len(V)):
+    #         if not np.allclose(normals_py[i, j], normals_fort[i, j]):
+    #             print(U[i, j], V[i, j])
+
+    return normals_fort

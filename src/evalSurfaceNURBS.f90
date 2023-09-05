@@ -105,3 +105,32 @@ subroutine derivEvalSurfaceNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw,
     end do
 
 end subroutine derivEvalSurfaceNURBS
+
+subroutine evalSurfaceNormalsNURBS(u, v, uKnotVec, vKnotVec, uDegree, vDegree, Pw, nCtlu, nCtlv, nDim, n, m, normals)
+    use precision
+    implicit none
+
+    ! Input
+    integer, intent(in) :: uDegree, vDegree, nCtlu, nCtlv, nDim, n, m
+    real(kind=realType), intent(in) :: u(0:m - 1, 0:n - 1), v(0:m - 1, 0:n - 1)
+    real(kind=realType), intent(in) :: uKnotVec(0:nCtlu + uDegree), vKnotVec(0:nCtlv + vDegree)
+    real(kind=realType), intent(in) :: Pw(0:nDim - 1, 0:nCtlv - 1, 0:nCtlu - 1)
+
+    ! Output
+    real(kind=realType), intent(out) :: normals(0:nDim - 2, 0:m - 1, 0:n - 1)
+
+    ! Working
+    real(kind=realType) :: skl(0:nDim - 2, 0:1, 0:1)
+    real(kind=realType) :: tmp(0:nDim - 2)
+    integer :: i, j
+
+    do j = 0, m - 1
+        do i = 0, n - 1
+            call derivEvalSurfaceNURBS(u(j, i), v(j, i), uKnotVec, vKnotVec, &
+                                       uDegree, vDegree, Pw, nCtlu, nCtlv, nDim, 1, skl)
+            call cross(skl(:, 0, 1), skl(:, 1, 0), tmp)
+            normals(:, j, i) = tmp(:) / norm2(tmp)
+        end do
+    end do
+
+end subroutine evalSurfaceNormalsNURBS
