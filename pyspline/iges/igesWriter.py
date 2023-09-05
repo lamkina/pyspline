@@ -1,7 +1,9 @@
 # Standard Python modules
-from datetime import date
 import time
+from datetime import date
+from pathlib import PosixPath
 from typing import List, TextIO, Tuple, Union
+import os
 
 # External modules
 import numpy as np
@@ -92,16 +94,16 @@ def writeLines(handle: TextIO, lines: List[str], counter: int, marginText: str, 
 # ==============================================================================
 class IGESWriter:
     @staticmethod
-    def openFile(fileName: str) -> TextIO:
+    def openFile(fileName: PosixPath) -> TextIO:
         # Determine the filename
-        if fileName.endswith(".iges") or fileName.endswith(".igs"):
+        if fileName.suffix in [".iges", ".igs"]:
             fileName = fileName
         else:
-            if "." in fileName:
-                _, ext = fileName.split(".")
+            ext = fileName.suffix
+            if ext:
                 raise ValueError(f"File extension '{ext}' is not valid for IGES files.")
             else:
-                fileName = f"{fileName}.iges"
+                fileName = fileName.with_suffix(".iges")
 
         return open(fileName, "w")
 
@@ -161,6 +163,8 @@ class IGESWriter:
         author = kwargs.get("author", "")
         authorOrg = kwargs.get("authorOrg", "")
 
+        fp_short = os.path.split(handle.name)[-1]
+
         # Figure out the units
         if unit.lower() in UNITMAP.keys():
             unitName = unit.capitalize()
@@ -179,7 +183,7 @@ class IGESWriter:
             formatString(PARAMDELIM),  # Parameter delimiter, empty string means accept default (,) (#1)
             formatString(RECORDDELIM),  # Record delimiter, empty string means accept default (;) (#2)
             formatString(productID),  # Product ID (#3)
-            formatString(handle.name),  # File name (#4)
+            formatString(fp_short),  # File name (#4)
             formatString(f"pySpline version {__version__}"),  # System ID (#5)
             formatString("STANDARD"),  # Preprocessor version (#6)
             "32",  # Number of binary bits for integer representation (#7)
@@ -188,7 +192,7 @@ class IGESWriter:
             "308",  # Double precision magnitude (#10)
             "15",  # Dobule precision significance (#11)
             "",  # Product identification for the receiver (#12)
-            f"1.",  # Model space scale (#13)
+            "1.",  # Model space scale (#13)
             f"{unitIdx}",  # Unit flag (#14)
             formatString(unitName),  # Units (#15)
             "1",  # Maximum number of line weight gradiations (#16)
@@ -266,8 +270,6 @@ class IGESWriter:
         entityType = 126
         k = geo.nCtl - 1
         m = geo.degree
-        n = k - m + 1
-        a = n + (2 * m)
 
         nDim = geo.nDim - 1  # Adjust for homegenous coords
         prop1 = 0 if nDim > 2 else 1  # nonplanar (always assumed)

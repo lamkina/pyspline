@@ -1,7 +1,6 @@
 # Standard Python modules
-from datetime import date
-import time
-from typing import List, Optional, TextIO, Tuple, Union
+from pathlib import Path, PosixPath
+from typing import List, Optional, TextIO, Union
 
 # External modules
 import numpy as np
@@ -263,11 +262,13 @@ def writeTecplot(geo: GEOTYPE, fileName: str, **kwargs):
             pass
 
 
-def writeIGES(fileName: str, geo: Union[List[GEOTYPE], GEOTYPE], units: str = "m", **kwargs):
+def writeIGES(fileName: Union[str, PosixPath], geo: Union[List[GEOTYPE], GEOTYPE], units: str = "m", **kwargs):
     if not isinstance(geo, list):
         geo = [geo]
 
     coordMax, geoList = IGESWriter.preprocess(geo)
+
+    fileName = Path(fileName) if not isinstance(fileName, PosixPath) else fileName
     f = IGESWriter.openFile(fileName)
     IGESWriter.writeFirstLine(f)
     gCount = IGESWriter.writeGlobalSection(f, units, coordMax, **kwargs)
