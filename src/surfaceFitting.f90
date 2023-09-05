@@ -1,5 +1,5 @@
 subroutine buildSurfaceCoeffMatrix(u, v, uKnotVec, vKnotVec, uDegree, vDegree, nCtlu, nCtlv, nu, nv, vals, &
-                                 rowPtr, colInd)
+                                   rowPtr, colInd)
 
     use precision
     implicit none
@@ -26,14 +26,14 @@ subroutine buildSurfaceCoeffMatrix(u, v, uKnotVec, vKnotVec, uDegree, vDegree, n
             ! Get u interval
             call findSpan(u(j, i), uDegree, uKnotVec, nCtlu, ileftu)
             call basis(u(j, i), uDegree, uKnotVec, ileftu, nCtlu, basisu)
-            
+
             ! Convert to 1 based index
             ileftu = ileftu + 1
 
             ! Get v interval
             call findSpan(v(j, i), vDegree, vKnotVec, nCtlv, ileftv)
             call basis(v(j, i), vDegree, vKnotVec, ileftv, nCtlv, basisv)
-            
+
             ! Convert to 1 based index
             ileftv = ileftv + 1
 
@@ -82,12 +82,13 @@ subroutine surfaceParamCorr(uKnotVec, vKnotVec, uDegree, vDegree, u, v, P, nCtlu
     do i = 2, nu - 1
         do j = 2, nv - 2
             call evalSurface(u(j, i), v(j, i), uKnotVec, vKnotVec, uDegree, vDegree, P, nCtlu, nCtlv, nDim, 1, 1, val)
-            call derivEvalSurface(u(j, i), v(j,i), uKnotVec, vKnotVec, uDegree, vDegree, P, 2, nCtlu, nCtlv, nDim, deriv)
+            call derivEvalSurface(u(j, i), v(j, i), uKnotVec, vKnotVec, uDegree, vDegree, P, &
+                                  2, nCtlu, nCtlv, nDim, deriv)
 
             D = val - X(:, j, i)
 
             A(1, 1) = NORM2(deriv(:, 2, 1))**2 + dot_product(D, deriv(:, 3, 1))
-            A(1, 2) = dot_product(deriv(:, 2, 1), deriv(:,1, 2)) + dot_product(D, deriv(:, 2, 2))
+            A(1, 2) = dot_product(deriv(:, 2, 1), deriv(:, 1, 2)) + dot_product(D, deriv(:, 2, 2))
             A(2, 1) = A(1, 2)
             A(2, 2) = NORM2(deriv(:, 1, 2))**2 + dot_product(D, deriv(:, 1, 3))
 
@@ -124,7 +125,7 @@ subroutine surfaceParamCorr(uKnotVec, vKnotVec, uDegree, vDegree, u, v, P, nCtlu
 
     do i = 1, nu
         do j = 1, nv
-            call evalSurface(u(j, i), v(j, i), uKnotVec, vKnotVec, ku-1, kv-1, P, nCtlu, nCtlv, nDim, 1, 1, val)
+            call evalSurface(u(j, i), v(j, i), uKnotVec, vKnotVec, ku - 1, kv - 1, P, nCtlu, nCtlv, nDim, 1, 1, val)
             D = val - X(:, j, i)
             rms = rms + dot_product(D, D)
         end do
