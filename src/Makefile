@@ -11,7 +11,7 @@ include ${RULES_FILE}
 vpath %.o $(OBJDIR)
 
 # Name of files to be compiled:
-MODS = precision.o\
+MODS = precision.o
 
 OBJS =  basis.o\
 	findSpan.o\
@@ -24,7 +24,9 @@ OBJS =  basis.o\
 	curveFitting.o\
 	surfaceFitting.o\
 	projections.o\
-	linearAlgebra.o
+	linearAlgebra.o\
+	newtonSolver.o\
+	pointInversion.o\
 
 default:
 	$(MAKE) $(MODS)
