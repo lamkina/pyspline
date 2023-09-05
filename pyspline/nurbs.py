@@ -221,14 +221,14 @@ class NURBSSurface(BSplineSurface):
         )
         return vals.squeeze().T
 
-    def getDerivative(self, u: np.ndarray, v: np.ndarray, order) -> np.ndarray:
+    def getDerivative(self, u: float, v: float, order) -> np.ndarray:
         """Evaluate the first derivatvies of the spline surface
 
         Parameters
         ----------
-        u : np.ndarray
+        u : float
             Parametric u value
-        v : np.ndarray
+        v : float
             Parametric v value
 
         Returns
@@ -237,9 +237,6 @@ class NURBSSurface(BSplineSurface):
             Spline derivative evaluation at u,v. Shape depends on the
             input.
         """
-        if not u.shape == v.shape:
-            raise ValueError(f"u and v must have the same shape.  u has shape {u.shape} and v has shape {v.shape}.")
-
         if not np.ndim(u) == 0:
             raise ValueError("'getDerivative' only accepts scalar arguments.")
 
