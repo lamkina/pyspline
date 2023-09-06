@@ -24,7 +24,12 @@ subroutine pointInvCurve(xStar, coord, u0, lb, ub, maxIter, tol, printLevel, kno
     end if
 
     ! Call the newton solver
-    call newton(curveResiduals, curveJacobian, u0, uStar, lb, ub, 1.0, 0.5, 0.1, maxIter, 3, tol, nPts, printLevel)
+    if (rational) then
+        call newton(curveResiduals, curveJacobian, u0, uStar, lb, ub, 1.0, 0.5, 0.1, maxIter, 3, tol, nPts, printLevel)
+    else
+        call newton(curveResidualsNURBS, curveJacobianNURBS, u0, uStar, lb, ub, 1.0, 0.5, 0.1, &
+                    maxIter, 3, tol, nPts, printLevel)
+    end if
 
 contains
 
@@ -40,21 +45,41 @@ contains
 
         ! Working
         integer :: i
-        real(kind=realType) :: val(nDim, nPts), weights(nPts)
+        real(kind=realType) :: val(nDim, nPts)
 
         r = 0.0
 
-        if (rational) then
-            call evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val, weights)
-        else
-            call evalCurve(u, knotVec, degree, Pw, nCtl, nDim, nPts, val)
-        end if
+        call evalCurve(u, knotVec, degree, Pw, nCtl, nDim, nPts, val)
 
         do i = 1, nPts
             r(i) = val(coord, i) - xStar(i)
         end do
 
     end subroutine curveResiduals
+
+    subroutine curveResidualsNURBS(u, r)
+        use precision
+        implicit none
+
+        ! Input
+        real(kind=realType), intent(in) :: u(nPts)
+
+        ! Output
+        real(kind=realType) :: r(nPts)
+
+        ! Working
+        integer :: i
+        real(kind=realType) :: val(nDim, nPts), weights(nPts)
+
+        r = 0.0
+
+        call evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val, weights)
+
+        do i = 1, nPts
+            r(i) = val(coord, i) - xStar(i)
+        end do
+
+    end subroutine curveResidualsNURBS
 
     subroutine curveJacobian(u, jac)
         use precision
@@ -73,14 +98,32 @@ contains
         jac(:, :) = 0.0
 
         do i = 1, nPts
-            if (rational) then
-                call derivEvalCurveNURBS(u(i), knotVec, degree, Pw, 1, nCtl, nDim, tmp)
-            else
-                call derivEvalCurve(u(i), knotVec, degree, Pw, 1, nCtl, nDim, tmp)
-            end if
+            call derivEvalCurve(u(i), knotVec, degree, Pw, 1, nCtl, nDim, tmp)
             jac(i, i) = tmp(coord, 2)
         end do
     end subroutine curveJacobian
+
+    subroutine curveJacobianNURBS(u, jac)
+        use precision
+        implicit none
+
+        ! Input
+        real(kind=realType), intent(in) :: u(nPts)
+
+        ! Output
+        real(kind=realType) :: jac(nPts, nPts)
+
+        ! Working
+        integer :: i
+        real(kind=realType) :: tmp(nDim, 2)
+
+        jac(:, :) = 0.0
+
+        do i = 1, nPts
+            call derivEvalCurveNURBS(u(i), knotVec, degree, Pw, 1, nCtl, nDim, tmp)
+            jac(i, i) = tmp(coord, 2)
+        end do
+    end subroutine curveJacobianNURBS
 
 end subroutine pointInvCurve
 
