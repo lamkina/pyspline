@@ -44,7 +44,6 @@ subroutine newton(f, fp, x0, x, lb, ub, alpha0, rho, c, maxIter, maxIterLS, tol,
         ! Solve the linear system for the newton step
         if (nPts > 1) then
             resid = -1 * resid
-            ! call solve_linear_system(jac, resid, deltaX, nPts)
             call ludecomp(jac, L, U, P, nPts)
             call lusolve(L, U, P, deltaX, resid, nPts)
             resid = -1 * resid

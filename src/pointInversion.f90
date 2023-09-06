@@ -111,8 +111,13 @@ subroutine pointInvSurface(xStar, coords, u0, lb, ub, maxIter, tol, printLevel, 
     end if
 
     ! Call the newton solver
-    call newton(surfaceResiduals, surfaceJacobian, u0, uStar, lb, ub, 1.0, 0.5, 0.1, maxIter, 3, tol, nPts, printLevel)
-
+    if (rational) then
+        call newton(surfaceResidualsNURBS, surfaceJacobianNURBS, u0, uStar, lb, ub, 1.0, 0.5, 0.1, &
+                    maxIter, 3, tol, nPts, printLevel)
+    else
+        call newton(surfaceResiduals, surfaceJacobian, u0, uStar, lb, ub, 1.0, 0.5, 0.1, &
+                    maxIter, 3, tol, nPts, printLevel)
+    end if
 contains
     subroutine surfaceResiduals(u, r)
         use precision
@@ -130,18 +135,38 @@ contains
 
         do i = 1, nPts, 2
 
-            if (rational) then
-                call evalSurfaceNURBS(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
-                                      nCtlu, nCtlv, nDim, 1, 1, tmp)
-            else
-                call evalSurface(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
-                                 nCtlu, nCtlv, nDim, 1, 1, tmp)
-            end if
+            call evalSurface(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
+                             nCtlu, nCtlv, nDim, 1, 1, tmp)
 
             r(i) = tmp(coords(1)) - xStar(i)
             r(i + 1) = tmp(coords(2)) - xStar(i + 1)
         end do
     end subroutine surfaceResiduals
+
+    subroutine surfaceResidualsNURBS(u, r)
+        use precision
+        implicit none
+
+        ! Input
+        real(kind=realType), intent(in) :: u(nPts)
+
+        ! Output
+        real(kind=realType), intent(out) :: r(nPts)
+
+        ! Working
+        integer :: i
+        real(kind=realType) :: tmp(nDim)
+
+        do i = 1, nPts, 2
+
+            call evalSurfaceNURBS(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
+                                  nCtlu, nCtlv, nDim, 1, 1, tmp)
+
+            r(i) = tmp(coords(1)) - xStar(i)
+            r(i + 1) = tmp(coords(2)) - xStar(i + 1)
+        end do
+
+    end subroutine surfaceResidualsNURBS
 
     subroutine surfaceJacobian(u, jac)
         use precision
@@ -157,18 +182,42 @@ contains
         integer :: i
         real(kind=realType) :: skl(nDim, 2, 2)
 
+        jac(:, :) = 0.0
+
         do i = 1, nPts, 2
-            if (rational) then
-                call derivEvalSurfaceNURBS(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
-                                           nCtlu, nCtlv, nDim, 1, skl)
-            else
-                call derivEvalSurface(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
-                                      1, nCtlu, nCtlv, nDim, skl)
-            end if
+            call derivEvalSurface(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
+                                  1, nCtlu, nCtlv, nDim, skl)
+
             jac(i, i) = skl(coords(1), 1, 2)
-            jac(i, i + 1) = skl(coords(2), 1, 2)
-            jac(i + 1, i) = skl(coords(1), 2, 1)
+            jac(i, i + 1) = skl(coords(1), 2, 1)
+            jac(i + 1, i) = skl(coords(2), 1, 2)
             jac(i + 1, i + 1) = skl(coords(2), 2, 1)
         end do
     end subroutine surfaceJacobian
+
+    subroutine surfaceJacobianNURBS(u, jac)
+        use precision
+        implicit none
+
+        ! Input
+        real(kind=realType), intent(in) :: u(nPts)
+
+        ! Output
+        real(kind=realType), intent(out) :: jac(nPts, nPts)
+
+        ! Working
+        integer :: i
+        real(kind=realType) :: skl(nDim - 1, 2, 2)
+
+        jac(:, :) = 0.0
+
+        do i = 1, nPts, 2
+            call derivEvalSurfaceNURBS(u(i), u(i + 1), uKnotVec, vKnotVec, uDegree, vDegree, Pw, &
+                                       nCtlu, nCtlv, nDim, 1, skl)
+            jac(i, i) = skl(coords(1), 1, 2)
+            jac(i, i + 1) = skl(coords(1), 2, 1)
+            jac(i + 1, i) = skl(coords(2), 1, 2)
+            jac(i + 1, i + 1) = skl(coords(2), 2, 1)
+        end do
+    end subroutine surfaceJacobianNURBS
 end subroutine pointInvSurface
