@@ -200,7 +200,7 @@ def writeSurfaceDirections(surf: BSplineSurface, file: str, isurf: int):
 
 def writeSurfaceNormalsTecplot(surf: SURFTYPE, fileName: str) -> None:
     surf.computeData(recompute=True)
-    normVecs = computeSurfaceNormals(surf.uData, surf.vData, surf)
+    normVecs = computeSurfaceNormals(surf.uData, surf.vData, surf, mesh=True)
     data = np.concatenate((surf.data, normVecs), axis=2).reshape((len(surf.uData), len(surf.vData), 1, 6))
     variables = ["CoordinateX", "CoordinateY", "CoordinateZ", "NormX", "NormY", "NormZ"]
 

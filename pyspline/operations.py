@@ -858,39 +858,35 @@ def reverseSurface(surface: SURFTYPE, param_dir: str = "u"):
         raise ValueError("Surface reversal can only be done for 'u' or 'v' parameters.")
 
 
-def computeSurfaceNormals(u: np.ndarray, v: np.ndarray, surf: SURFTYPE) -> np.ndarray:
-    V, U = np.meshgrid(v, u)
-    # print(V.shape)
-    # print(U.shape)
+def computeSurfaceNormals(
+    u: Union[float, np.ndarray], v: Union[float, np.ndarray], surf: SURFTYPE, mesh: bool = False
+) -> np.ndarray:
+    u = np.atleast_1d(u)
+    v = np.atleast_1d(v)
 
-    # normals_py = np.zeros((len(u), len(v), 3))
-
-    # for i in range(U.shape[0]):
-    # for j in range(U.shape[1]):
-    # u, v = U[i, j], V[i, j]
-    # print(u, v)
-    # deriv = surf.getDerivative(u, v, 1)
-    # normals_py[i, j] = np.cross(deriv[1, 0], deriv[0, 1])
-    # normals_py[i, j] /= np.linalg.norm(normals_py[i, j])
+    if mesh:
+        V, U = np.meshgrid(v, u)
 
     if surf.rational:
-        normals_fort = libspline.evalsurfacenormalsnurbs(
-            U.T, V.T, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPntsW.T
-        )
+        if mesh:
+            normals = libspline.evalsurfacenormalsnurbs(
+                U.T, V.T, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPntsW.T
+            )
+        else:
+            normals = libspline.evalsurfacenormalsnurbs(
+                u, v, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPntsW.T
+            )
+
     else:
-        normals_fort = libspline.evalsurfacenormals(
-            U, V, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPnts.T
-        )
+        if mesh:
+            normals = libspline.evalsurfacenormals(
+                U.T, V.T, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPnts.T
+            )
+        else:
+            normals = libspline.evalsurfacenormals(
+                u, v, surf.uKnotVec, surf.vKnotVec, surf.uDegree, surf.vDegree, surf.ctrlPnts.T
+            )
 
-    normals_fort = normals_fort.squeeze().T
+    normals = normals.squeeze().T
 
-    # print(normals_py.squeeze())
-    # print()
-    # print(normals_fort)
-
-    # for i in range(len(U)):
-    #     for j in range(len(V)):
-    #         if not np.allclose(normals_py[i, j], normals_fort[i, j]):
-    #             print(U[i, j], V[i, j])
-
-    return normals_fort
+    return normals
