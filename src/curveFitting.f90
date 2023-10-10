@@ -1,4 +1,3 @@
-
 subroutine buildCurveCoeffMatrix(u, ud, knotVec, degree, nctl, n, nd, vals, row_ptr, col_ind)
     use precision
     implicit none
@@ -6,7 +5,7 @@ subroutine buildCurveCoeffMatrix(u, ud, knotVec, degree, nctl, n, nd, vals, row_
     integer, intent(in) :: degree, nctl, n, nd
     real(kind=realType), intent(in) :: knotVec(nctl + degree + 1), u(n), ud(nd)
     ! Output
-    real(kind=realType), intent(inout) :: vals((n + nd) * (degree +1))
+    real(kind=realType), intent(inout) :: vals((n + nd) * (degree + 1))
     integer, intent(inout) :: row_ptr(n + nd + 1)
     integer, intent(inout) :: col_ind((n + nd) * (degree + 1))
     real(kind=realType) :: basisu(degree + 1), basisud(degree + 1, degree + 1)
@@ -17,6 +16,7 @@ subroutine buildCurveCoeffMatrix(u, ud, knotVec, degree, nctl, n, nd, vals, row_
     do i = 1, n ! Do the values first
         call findSpan(u(i), degree, knotVec, nctl, ileft)
         call basis(u(i), degree, knotVec, ileft, nctl, basisu)
+
         ! Convert to 1 based indexing
         ileft = ileft + 1
 
@@ -44,7 +44,7 @@ subroutine buildCurveCoeffMatrix(u, ud, knotVec, degree, nctl, n, nd, vals, row_
 end subroutine buildCurveCoeffMatrix
 
 subroutine buildCurveConJac(Aval, ArowPtr, AcolInd, Bval, BrowPtr, BcolInd, Cval, CrowPtr, CcolInd, &
-                      Am, An, Cm, Annz, Bnnz, Cnnz, Jval, JcolInd, JrowPtr)
+                            Am, An, Cm, Annz, Bnnz, Cnnz, Jval, JcolInd, JrowPtr)
     use precision
     implicit none
     ! Input
@@ -152,6 +152,10 @@ subroutine curveParamCorr(knotVec, degree, u, coef, nCtl, nDim, length, n, X)
         inner_loop: do j = 1, maxInnerIter
 
             sTilde = u(i) + c * (knotVec(nCtl + k) - knotVec(1)) / length
+            if (sTilde < 0) then
+                c = c * 0.5
+                cycle
+            end if
             call evalCurve(sTilde, knotVec, degree, coef, nCtl, nDim, 1, val)
             D2 = X(:, i) - val
             if (NORM2(D) .ge. NORM2(D2)) then

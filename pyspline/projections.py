@@ -17,17 +17,31 @@ def pointCurve(
     if u is not None:
         u = np.atleast_2d(u)
     else:
-        u = -1 * np.ones(len(points))
+        if points.shape[0] == 1:
+            u = -1 * np.ones(len(points.flatten()))
+        else:
+            u = -1 * np.ones(len(points))
 
     # If necessary brute force the starting point
     if np.any(u < 0) or np.any(u > 1):
         curve.computeData()
-        u = libspline.pointcurvestart(points.T, curve.uData, curve.data.T)
+        u = libspline.pointcurvestart(points, curve.uData, curve.data.reshape((curve.nDim, len(curve.data))))
 
+    if points.shape[0] == 1:
+        points = points.flatten()
     D = np.zeros_like(points)
     for i, point in enumerate(points):
         ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
-        u[i], D[i] = libspline.pointcurve(point, curve.knotVec, curve.degree, ctrlPnts.T, nIter, tol, u[i])
+        u[i], D[i] = libspline.pointcurve(
+            np.array(point),
+            curve.knotVec,
+            curve.degree,
+            ctrlPnts.reshape((curve.nDim, curve.nCtl)),
+            nIter,
+            tol,
+            u[i],
+            curve.rational,
+        )
 
     return u.squeeze(), D.squeeze()
 

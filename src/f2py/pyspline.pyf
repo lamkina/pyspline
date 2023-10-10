@@ -268,18 +268,19 @@ python module libspline ! in
             real(kind=realtype) dimension(ndim,nv,nu),intent(in),depend(nu,nv,ndim) :: x
             real(kind=realtype) intent(out) :: rms
         end subroutine surfaceparamcorr
-        subroutine pointcurve(points,knotvec,degree,pw,niter,eps,u,nctl,ndim,diff) ! in :libspline.projections.F90
+        subroutine pointcurve(points,knotvec,degree,pw,niter,eps,u,rational,nctl,ndim,diff) ! in projections.F90
             use precision
-            real(kind=realtype) dimension(3),intent(in) :: points
+            real(kind=realtype) dimension(ndim),intent(in) :: points
             real(kind=realtype) dimension(nctl+degree+1),intent(in),depend(degree,nctl) :: knotvec
             integer intent(in) :: degree
-            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            real(kind=realtype) dimension(ndim,nctl),intent(in),depend(ndim) :: pw
             integer intent(in) :: niter
             real(kind=realtype) intent(in) :: eps
             real(kind=realtype) intent(in,out) :: u
             integer, optional,intent(in),check(shape(pw,1)==nctl),depend(pw) :: nctl=shape(pw,1)
-            integer, optional,intent(in),check(shape(pw,0)==ndim),depend(pw) :: ndim=shape(pw,0)
-            real(kind=realtype) dimension(3),intent(out) :: diff
+            integer, optional,intent(in),check(len(points)>=ndim),depend(points) :: ndim=len(points)
+            real(kind=realtype) dimension(ndim),intent(out),depend(ndim) :: diff
+            logical intent(in) :: rational
         end subroutine pointcurve
         subroutine curvecurve(knotvec1,degree1,pw1,knotvec2,degree2,pw2,nctl1,nctl2,ndim,niter,tol,u,t,d) ! in :libspline:projections.F90
             use precision

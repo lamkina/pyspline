@@ -16,7 +16,7 @@
 #define wolfe .001
 #define nLine 20
 
-subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, u, nCtl, nDim, diff)
+subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, u, rational, nCtl, nDim, diff)
 
     !***DESCRIPTION
     !
@@ -46,27 +46,23 @@ subroutine pointCurve(points, knotVec, degree, Pw, nIter, eps, u, nCtl, nDim, di
 
     ! Input
     integer, intent(in) :: degree, nCtl, nDim, nIter
-    real(kind=realType), intent(in) :: points(3)
+    real(kind=realType), intent(in) :: points(nDim)
     real(kind=realType), intent(in) :: knotVec(nCtl + degree + 1)
     real(kind=realType), intent(in) :: Pw(nDim, nCtl)
     real(kind=realType), intent(in) :: eps
+    logical, intent(in) :: rational
 
     ! Output
     real(kind=realType), intent(inout) :: u
-    real(kind=realType), intent(out) :: diff(3)
+    real(kind=realType), intent(out) :: diff(nDim)
 
     ! Working
-    real(kind=realType) :: val(3), deriv(3, 3), step, c, dist, p_diff, w
-    real(kind=realType) :: grad, hessian, update, R(3), nDist, fval, nfval, pgrad, newPt
+    real(kind=realType) :: val(nDim), deriv(nDim, 3), step, c, dist, p_diff, w
+    real(kind=realType) :: grad, hessian, update, R(nDim), nDist, fval, nfval, pgrad, newPt
     integer :: m, ii, NLSFail, order
-    logical :: flag, cflag, rational
+    logical :: flag, cflag
 
     order = degree + 1
-    if (nDim == 3) then
-        rational = .False.
-    else if (nDim == 4) then
-        rational = .True.
-    end if
 
     NLSFail = 0
     iterationLoop: do ii = 1, nIter

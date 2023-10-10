@@ -337,6 +337,7 @@ def curveLMSApprox(
     derivWeights: Optional[np.ndarray] = None,
     paramType: str = "arc",
     outputPrint: bool = True,
+    knotVec: Optional[np.ndarray] = None,
 ) -> BSplineCurve:
     """
     Fit a B-spline curve to a set of input points using a least-mean-squares approach.
@@ -496,7 +497,8 @@ def curveLMSApprox(
     currIter = 0
     while True:
         # Compute the knot vector
-        knotVec = computeKnotVecLMS(u, nPts, nCtl, degree)
+        if knotVec is None:
+            knotVec = computeKnotVecLMS(u, nPts, nCtl, degree)
 
         # Create a matrix to hold the control point coefficients
         ctrlPnts = np.zeros((nCtl, nDim), "d")
@@ -593,7 +595,7 @@ def curveLMSApprox(
     curve = BSplineCurve(degree, knotVec, ctrlPnts)
     curve.X = points
 
-    return curve
+    return curve, err
 
 
 def curveInterpGlobal(
