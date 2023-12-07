@@ -1,9 +1,9 @@
 # Standard Python modules
-import time
 from datetime import date
-from pathlib import PosixPath
-from typing import List, TextIO, Tuple, Union
 import os
+from pathlib import PosixPath
+import time
+from typing import List, TextIO, Tuple, Union
 
 # External modules
 import numpy as np

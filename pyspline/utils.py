@@ -2,10 +2,9 @@
 from copy import deepcopy
 from typing import Optional, Tuple
 
-import numpy as np
-
 # External modules
 from baseclasses.utils import Error
+import numpy as np
 from scipy import sparse
 from scipy.special import binom
 

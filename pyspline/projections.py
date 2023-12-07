@@ -10,38 +10,64 @@ from .customTypes import CURVETYPE, SURFTYPE
 
 
 def pointCurve(
-    points: np.ndarray, curve: CURVETYPE, nIter: int = 10, tol: float = 1e-6, u: Optional[np.ndarray] = None
+    points: np.ndarray,
+    curve: CURVETYPE,
+    nIter: int = 10,
+    nIterLS: int = 3,
+    tol: float = 1e-6,
+    rho: float = 0.5,
+    alpha0: float = 1.0,
+    wolfe: float = 1e-3,
+    printLevel: int = 0,
+    u: Optional[np.ndarray] = None,
+    lb: Optional[np.ndarray] = None,
+    ub: Optional[np.ndarray] = None,
 ) -> Tuple[float, float]:
     points = np.atleast_2d(points)
 
+    # Handle the lower bounds
+    if lb is None:
+        lb = np.zeros(len(points))
+    else:
+        lb = np.atleast_1d(lb)
+
+    # Handle the upper bounds
+    if ub is None:
+        ub = np.ones(len(points))
+    else:
+        ub = np.atleast_1d(ub)
+
+    # Handle the initial guesses for u
     if u is not None:
         u = np.atleast_2d(u)
     else:
-        if points.shape[0] == 1:
-            u = -1 * np.ones(len(points.flatten()))
-        else:
-            u = -1 * np.ones(len(points))
+        u = -np.ones(points.shape[0])
 
     # If necessary brute force the starting point
     if np.any(u < 0) or np.any(u > 1):
-        curve.computeData()
-        u = libspline.pointcurvestart(points, curve.uData, curve.data.reshape((curve.nDim, len(curve.data))))
+        curve.computeData(mult=20)
+        u = libspline.pointcurvestart(points.T, curve.uData, curve.data.T)
 
-    if points.shape[0] == 1:
-        points = points.flatten()
     D = np.zeros_like(points)
-    for i, point in enumerate(points):
-        ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
-        u[i], D[i] = libspline.pointcurve(
-            np.array(point),
-            curve.knotVec,
-            curve.degree,
-            ctrlPnts.reshape((curve.nDim, curve.nCtl)),
-            nIter,
-            tol,
-            u[i],
-            curve.rational,
-        )
+    ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
+
+    u, D = libspline.pointcurve(
+        points,
+        u,
+        curve.knotVec,
+        curve.degree,
+        ctrlPnts.T,
+        curve.rational,
+        lb,
+        ub,
+        tol,
+        nIter,
+        nIterLS,
+        alpha0,
+        rho,
+        wolfe,
+        printLevel,
+    )
 
     return u.squeeze(), D.squeeze()
 
@@ -54,55 +80,67 @@ def pointVolume():
     pass
 
 
-def curveCurve(curve1: CURVETYPE, curve2: CURVETYPE, nIter, tol: float, u: float = -1, t: float = -1) -> float:
-    """
-    Find the minimum distance between this curve (self) and a
-    second curve passed in (inCurve)
+def curveCurve(
+    curve1: CURVETYPE,
+    curve2: CURVETYPE,
+    nIter: int = 10,
+    nIterLS: int = 3,
+    tol: float = 1e-6,
+    rho: float = 0.5,
+    alpha0: float = 1.0,
+    wolfe: float = 1e-3,
+    printLevel: int = 0,
+    u: Optional[np.ndarray] = None,
+    lb: Optional[np.ndarray] = None,
+    ub: Optional[np.ndarray] = None,
+) -> float:
+    # Handle the lower bounds
+    if lb is None:
+        lb = np.zeros(2)
+    else:
+        lb = np.atleast_1d(lb)
 
-    Parameters
-    ----------
-    curve1 : BSplineCurve or NURBSCurve
-        Base curve for the projection
-    curve2 : BSplineCurve or NURBSCurve
-        Second curve to use
-    nIter : int
-        Maximum number of Newton iterations to perform.
-    tol : float
-        Desired parameter tolerance.
-    u : float
-        Initial guess for curve1 (this curve class)
-    t : float
-        Initial guess for inCurve (curve passed in )
+    # Handle the upper bounds
+    if ub is None:
+        ub = np.ones(2)
+    else:
+        ub = np.atleast_1d(ub)
 
-    Returns
-    -------
-    float
-        Parametric position on curve1 (this class)
-    float
-        Parametric position on curve2 (inCurve)
-    float
-        Minimum distance between this curve and inCurve. It
-        is equivalent to ||self(s) - inCurve(t)||_2.
-    """
-    if u < 0 or u > 1 or t < 0 or t > 1:
-        curve1.computeData()
-        curve2.computeData()
-        u, t = libspline.curvecurvestart(curve1.data.T, curve1.uData, curve2.data.T, curve2.uData)
+    # Handle the initial guesses for u
+    if u is not None:
+        u = np.atleast_2d(u)
+    else:
+        u = -np.ones(2)
 
-    u, t, d = libspline.curvecurve(
+    if np.any(u < 0) or np.any(u > 1):
+        curve1.computeData(mult=20)
+        curve2.computeData(mult=20)
+        u1, u2 = libspline.curvecurvestart(curve1.data.T, curve1.uData, curve2.data.T, curve2.uData)
+
+    u0 = np.array([u1, u2])
+
+    u, d = libspline.curvecurve(
+        u0,
         curve1.knotVec,
         curve1.degree,
         curve1.ctrlPnts.T,
         curve2.knotVec,
         curve2.degree,
         curve2.ctrlPnts.T,
-        nIter,
+        curve1.rational,
+        curve2.rational,
+        lb,
+        ub,
         tol,
-        u,
-        t,
+        nIter,
+        nIterLS,
+        alpha0,
+        rho,
+        wolfe,
+        printLevel,
     )
 
-    return u, t, d
+    return u[0], u[1], d
 
 
 def curveSurface(curve: CURVETYPE, surface: SURFTYPE, nIter, tol: float):

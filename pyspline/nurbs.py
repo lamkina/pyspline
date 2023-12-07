@@ -128,10 +128,10 @@ class NURBSCurve(BSplineCurve):
         ck = libspline.derivevalcurvenurbs(u, self.knotVec, self.degree, self.ctrlPntsW.T, order)
         return ck.T
 
-    def computeData(self, recompute: bool = False) -> None:
+    def computeData(self, recompute: bool = False, mult: int = 10) -> None:
         if self.data is None or recompute:
             self.gPts = utils.calculateGrevillePoints(self.degree, self.nCtl, self.knotVec)
-            self.uData = utils.calculateInterpolatedGrevillePoints(10, self.gPts)
+            self.uData = utils.calculateInterpolatedGrevillePoints(mult, self.gPts)
             self.data = self.getValue(self.uData)
 
 

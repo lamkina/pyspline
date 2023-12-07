@@ -27,6 +27,7 @@ OBJS =  basis.o\
 	linearAlgebra.o\
 	newtonSolver.o\
 	pointInversion.o\
+	optimizer.o\
 
 default:
 	$(MAKE) $(MODS)
