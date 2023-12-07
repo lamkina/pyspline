@@ -28,11 +28,9 @@ writeTecplot(curve2, "curve2.dat")
 x0 = np.array([4, 4, 3])
 u1, d1 = pointCurve(x0, curve1, nIter=30, tol=1e-10, printLevel=1, u=0.5)
 val1 = curve1(u1)  # Closest point on curve1
-print(u1, val1, x0, d1, np.linalg.norm(val1 - x0))
 
 u2, d2 = pointCurve(x0, curve2, nIter=30, tol=1e-10, printLevel=1, u=1.0)
 val2 = curve2(u2)  # Closest point on curve2
-print(u2, val2, x0, d2, np.linalg.norm(val2 - x0))
 
 with open("projections.dat", "w") as file:
     data = np.row_stack((x0, val1))
@@ -45,8 +43,6 @@ with open("projections.dat", "w") as file:
 s, t, D = curveCurve(curve1, curve2, nIter=30, tol=1e-10, printLevel=1)
 val1 = curve1(s)
 val2 = curve2(t)
-
-print(val1, val2, np.linalg.norm(D))
 
 with open("projections.dat", "a") as file:
     data = np.row_stack((val1, val2))
