@@ -268,15 +268,16 @@ python module libspline ! in
             real(kind=realtype) dimension(ndim,nv,nu),intent(in),depend(nu,nv,ndim) :: x
             real(kind=realtype) intent(out) :: rms
         end subroutine surfaceparamcorr
-        subroutine pointcurve(points,u0,knotvec,degree,pw,nctl,ndim,rational,lb,ub,tol,maxiter,maxiterls,alpha0,rho,wolfe,printlevel,npts,u,diff) ! in :libspline:projections.F90
+        subroutine pointcurve(points,u0,knotvec,degree,pw,nctl,ndimpw,ndim,rational,lb,ub,tol,maxiter,maxiterls,alpha0,rho,wolfe,printlevel,npts,u,diff) ! in :libspline:projections.F90
             use precision
-            real(kind=realtype) dimension(npts,ndim),intent(in),depend(ndim) :: points
+            real(kind=realtype) dimension(npts,ndim),intent(in) :: points
             real(kind=realtype) dimension(npts),intent(in),depend(npts) :: u0
             real(kind=realtype) dimension(nctl+degree+1),intent(in),depend(degree,nctl) :: knotvec
             integer intent(in) :: degree
-            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            real(kind=realtype) dimension(ndimpw,nctl),intent(in) :: pw
             integer, optional,intent(in),check(shape(pw,1)==nctl),depend(pw) :: nctl=shape(pw,1)
-            integer, optional,intent(in),check(shape(pw,0)==ndim),depend(pw) :: ndim=shape(pw,0)
+            integer, optional,intent(in),check(shape(pw,0)==ndimpw),depend(pw) :: ndimpw=shape(pw,0)
+            integer, optional,intent(in),check(shape(points,0)==ndim),depend(points) :: ndim=shape(points,0)
             logical intent(in) :: rational
             real(kind=realtype) dimension(npts),intent(in),depend(npts) :: lb
             real(kind=realtype) dimension(npts),intent(in),depend(npts) :: ub
@@ -287,22 +288,23 @@ python module libspline ! in
             real(kind=realtype) intent(in) :: rho
             real(kind=realtype) intent(in) :: wolfe
             integer intent(in) :: printlevel
-            integer, optional,intent(in),check(len(points)>=npts),depend(points) :: npts=len(points)
+            integer, optional,intent(in),check(shape(points,1)==npts),depend(points) :: npts=shape(points,1)
             real(kind=realtype) dimension(npts),intent(out),depend(npts) :: u
             real(kind=realtype) dimension(npts,ndim),intent(out),depend(npts, ndim) :: diff
         end subroutine pointcurve
-        subroutine curvecurve(u0,knotvec1,degree1,pw1,knotvec2,degree2,pw2,nctl1,nctl2,ndim,rational1,rational2,lb,ub,tol,maxiter,maxiterls,alpha0,rho,wolfe,printlevel,u,diff) ! in :libspline:projections.F90
+        subroutine curvecurve(u0,knotvec1,degree1,pw1,knotvec2,degree2,pw2,nctl1,nctl2,ndimpw1,ndimpw2,rational1,rational2,lb,ub,tol,maxiter,maxiterls,alpha0,rho,wolfe,printlevel,u) ! in :libspline:projections.F90
             use precision
             real(kind=realtype) dimension(2),intent(in) :: u0
             real(kind=realtype) dimension(nctl1+degree1+1),intent(in),depend(degree1,nctl1) :: knotvec1
             integer intent(in) :: degree1
-            real(kind=realtype) dimension(ndim,nctl1),intent(in) :: pw1
+            real(kind=realtype) dimension(ndimpw1,nctl1),intent(in) :: pw1
             real(kind=realtype) dimension(nctl2+degree2+1),intent(in),depend(degree2,nctl2) :: knotvec2
             integer intent(in) :: degree2
-            real(kind=realtype) dimension(ndim,nctl2),intent(in),depend(ndim) :: pw2
+            real(kind=realtype) dimension(ndimpw2,nctl2),intent(in) :: pw2
             integer, optional,intent(in),check(shape(pw1,1)==nctl1),depend(pw1) :: nctl1=shape(pw1,1)
             integer, optional,intent(in),check(shape(pw2,1)==nctl2),depend(pw2) :: nctl2=shape(pw2,1)
-            integer, optional,intent(in),check(shape(pw1,0)==ndim),depend(pw1) :: ndim=shape(pw1,0)
+            integer, optional,intent(in),check(shape(pw1,0)==ndimpw1),depend(pw1) :: ndimpw1=shape(pw1,0)
+            integer, optional,intent(in),check(shape(pw2,0)==ndimpw2),depend(pw2) :: ndimpw2=shape(pw2,0)
             logical intent(in) :: rational1
             logical intent(in) :: rational2
             real(kind=realtype) dimension(2),intent(in) :: lb
@@ -315,7 +317,6 @@ python module libspline ! in
             real(kind=realtype) intent(in) :: wolfe
             integer intent(in) :: printlevel
             real(kind=realtype) dimension(2),intent(out) :: u
-            real(kind=realtype) dimension(ndim),intent(out),depend(ndim) :: diff
         end subroutine curvecurve
         subroutine pointcurvestart(points,u,data,nu,ndim,n,uguess) ! in :libspline:projections.F90
             use precision
@@ -356,7 +357,7 @@ python module libspline ! in
             integer, optional,intent(in),check(len(xstar)>=npts),depend(xstar) :: npts=len(xstar)
             real(kind=realtype) dimension(npts),intent(out),depend(npts) :: ustar
         end subroutine pointinvcurve
-        subroutine pointinvsurface(xstar,coords,u0,lb,ub,maxiter,tol,printlevel,uknotvec,vknotvec,udegree,vdegree,pw,nctlu,nctlv,ndim,npts,ustar) ! in pointInversion.f90
+        subroutine pointinvsurface(xstar,coords,u0,lb,ub,maxiter,tol,printlevel,uknotvec,vknotvec,udegree,vdegree,pw,nctlu,nctlv,ndim,npts,ustar) ! in :libspline:pointInversion.f90
             use precision
             real(kind=realtype) dimension(npts),intent(in) :: xstar
             integer dimension(2),intent(in) :: coords
@@ -377,6 +378,38 @@ python module libspline ! in
             integer, optional,intent(in),check(len(xstar)>=npts),depend(xstar) :: npts=len(xstar)
             real(kind=realtype) dimension(npts),intent(out),depend(npts) :: ustar
         end subroutine pointinvsurface
+        subroutine arclength(u1,u2,degree,knotvec,pw,ndim,nctl,rational,ngauss,length) ! in :libspline:arcLength.f90
+            use precision
+            real(kind=realtype) intent(in) :: u1
+            real(kind=realtype) intent(in) :: u2
+            integer, required,intent(in) :: degree
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
+            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
+            logical intent(in) :: rational
+            integer intent(in) :: ngauss
+            real(kind=realtype) intent(out) :: length
+        end subroutine arclength
+        subroutine pointinvarc(inputLength,ua,ub,starta,startb,degree,knotvec,pw,rational,ndim,nctl,maxiter,tol,printlevel,status,u) ! in :libspline:pointInversion.f90
+            use precision
+            real(8) intent(in) :: inputLength
+            real(kind=realtype) intent(in) :: ua
+            real(kind=realtype) intent(in) :: ub
+            logical intent(in) :: starta
+            logical intent(in) :: startb
+            integer, required,intent(in) :: degree
+            integer, intent(in) :: printlevel
+            real(kind=realtype) dimension(1 + degree + nctl),intent(in),check(shape(knotvec, 0) == 1 + degree + nctl,shape(knotvec, 0) == 1 + degree + nctl),depend(degree,nctl) :: knotvec
+            real(kind=realtype) dimension(ndim,nctl),intent(in) :: pw
+            logical intent(in) :: rational
+            integer, optional,intent(in),check(shape(pw, 0) == ndim),depend(pw) :: ndim=shape(pw, 0)
+            integer, optional,intent(in),check(shape(pw, 1) == nctl),depend(pw) :: nctl=shape(pw, 1)
+            integer intent(in) :: maxiter
+            real(kind=realtype) intent(in) :: tol
+            integer intent(out) :: status
+            real(kind=realtype) intent(out) :: u
+        end subroutine pointinvarc
     end interface
 end python module libspline
 

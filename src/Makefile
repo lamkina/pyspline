@@ -28,6 +28,9 @@ OBJS =  basis.o\
 	newtonSolver.o\
 	pointInversion.o\
 	optimizer.o\
+	arcLength.o\
+	integration.o\
+	brent.o\
 
 default:
 	$(MAKE) $(MODS)
