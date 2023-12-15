@@ -209,3 +209,64 @@ def pointInversionSurface(
     v = uStar[1::2]
 
     return u, v
+
+
+def pointInversionArcLength(
+    length: float,
+    curve: CURVETYPE,
+    lb: float = 0.0,
+    ub: float = 1.0,
+    maxIter: int = 100,
+    tol: float = 1e-6,
+    printLevel: int = 0,
+) -> Tuple[float, int]:
+    """Compute the parametric coordinate of a curve given an arc length.
+
+    Parameters
+    ----------
+    length : float
+        The arc length along the curve.
+    curve : CURVETYPE
+        The curve to compute the parametric coordinate of.
+    lb : float, optional
+        The lower bound of the parametric coordinate, by default 0.0.
+    ub : float, optional
+        The upper bound of the parametric coordinate, by default 1.0.
+    maxIter : int, optional
+        The maximum number of iterations to perform, by default 100.
+    tol : float, optional
+        The tolerance for the arc length, by default 1e-6.
+    printLevel : int, optional
+        The level of output to print, by default 0.
+
+    Returns
+    -------
+    Tuple[float, int]
+        The parametric coordinate of the curve at the specified arc length and
+        the exit status of the solver.
+    """
+    if lb < 0.0 or lb > 1.0:
+        raise ValueError("The lower bound must be between 0 and 1.")
+
+    if ub < 0.0 or ub > 1.0:
+        raise ValueError("The upper bound must be between 0 and 1.")
+
+    if lb > ub:
+        raise ValueError("The lower bound must be less than the upper bound.")
+
+    ctrlPnts = curve.ctrlPntsW if curve.rational else curve.ctrlPnts
+    status, u = libspline.pointinvarc(
+        length,
+        lb,
+        ub,
+        True,
+        False,
+        curve.degree,
+        curve.knotVec,
+        ctrlPnts.T,
+        curve.rational,
+        maxIter,
+        tol,
+        printLevel,
+    )
+    return u, status

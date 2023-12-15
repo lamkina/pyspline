@@ -80,7 +80,8 @@ class NURBSCurve(BSplineCurve):
 
         vals, _ = libspline.evalcurvenurbs(np.atleast_1d(u), self.knotVec, self.degree, self.ctrlPntsW.T)
 
-        return vals.squeeze().T[:3] if np.ndim(vals.squeeze().T) == 1 else vals.squeeze().T[:, : self.nDim]
+        nDim = self.nDim - 1
+        return vals.squeeze().T[:nDim] if np.ndim(vals.squeeze().T) == 1 else vals.squeeze().T[:, :nDim]
 
     def getWeight(self, u: Union[np.ndarray, float]) -> np.ndarray:
         """
@@ -133,6 +134,26 @@ class NURBSCurve(BSplineCurve):
             self.gPts = utils.calculateGrevillePoints(self.degree, self.nCtl, self.knotVec)
             self.uData = utils.calculateInterpolatedGrevillePoints(mult, self.gPts)
             self.data = self.getValue(self.uData)
+
+    def getArcLength(self, u1: float, u2: float, nGauss: int = 32) -> float:
+        """Compute the arc length between two parametric coordinates.
+
+        Parameters
+        ----------
+        u1 : float
+            First parametric coordinate.
+        u2 : float
+            Second parametric coordinate.
+        nGauss : int, optional
+            Number of Gauss points to use in the integration. The default is 4.
+
+        Returns
+        -------
+        float
+            The arc length between the two parametric coordinates.
+        """
+        arcLength = libspline.arclength(u1, u2, self.degree, self.knotVec, self.ctrlPntsW.T, self.rational, nGauss)
+        return arcLength
 
 
 class NURBSSurface(BSplineSurface):

@@ -115,6 +115,26 @@ class BSplineCurve(Spline):
             self.uData = utils.calculateInterpolatedGrevillePoints(mult, self.gPts)
             self.data = self.getValue(self.uData)
 
+    def getArcLength(self, u1: float, u2: float, nGauss: int = 32) -> float:
+        """Compute the arc length between two parametric coordinates.
+
+        Parameters
+        ----------
+        u1 : float
+            First parametric coordinate.
+        u2 : float
+            Second parametric coordinate.
+        nGauss : int, optional
+            Number of Gauss points to use in the integration. The default is 4.
+
+        Returns
+        -------
+        float
+            The arc length between the two parametric coordinates.
+        """
+        arcLength = libspline.arclength(u1, u2, self.degree, self.knotVec, self.ctrlPnts.T, self.rational, nGauss)
+        return arcLength
+
 
 class BSplineSurface(Spline):
     def __init__(self, uDegree: int, vDegree: int, ctrlPnts: np.ndarray, uKnotVec: np.ndarray, vKnotVec: np.ndarray):

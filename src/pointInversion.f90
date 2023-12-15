@@ -264,3 +264,44 @@ contains
         end do
     end subroutine surfaceJacobianNURBS
 end subroutine pointInvSurface
+
+subroutine pointInvArc(inputLength, ua, ub, startA, startB, degree, knotVec, Pw, rational, nDim, nCtl, &
+                       maxIter, tol, printLevel, status, u)
+    use precision
+    implicit none
+
+    ! Input
+    real(8), intent(in) :: inputLength
+    integer, intent(in) :: degree, maxIter, nCtl, nDim, printLevel
+    logical, intent(in) :: rational, startA, startB
+    real(kind=realType), intent(in) :: ua, ub, tol
+    real(kind=realType), intent(in) :: knotVec(nCtl + degree + 1), Pw(nDim, nCtl)
+
+    ! Output
+    integer, intent(out) :: status
+    real(kind=realType), intent(out) :: u
+
+    call brent(subArcLength, ua, ub, tol, maxIter, printLevel, u, status)
+
+contains
+    subroutine subArcLength(t, residual)
+        implicit none
+
+        ! Input
+        real(kind=realType), intent(in) :: t
+
+        ! Output
+        real(kind=realType), intent(out) :: residual
+
+        ! Working
+        real(kind=realType) :: dist
+
+        if (startA) then
+            call arcLength(ua, t, degree, knotVec, Pw, nDim, nCtl, rational, 32, dist)
+        else if (startB) then
+            call arcLength(ub, t, degree, knotVec, Pw, nDim, nCtl, rational, 32, dist)
+        end if
+
+        residual = dist - inputLength
+    end subroutine subArcLength
+end subroutine pointInvArc
