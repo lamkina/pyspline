@@ -55,7 +55,8 @@ subroutine optimizer(f, df, x0, x, lb, ub, alpha0, rho, wolfe, maxIter, maxIterL
         phi0 = obj ! Copy the objective function value into phi0
 
         ! Check for convergence using an infinity norm
-        if (printLevel > 0) write (*, '(a, i3, a, e12.4)') 'Iteration: ', iter, '| Tol: ', maxval(abs(gradient))
+        if (printLevel > 0) write (*, '(a, i3, a, e12.4, a, 4f5.2)') 'Iteration: ', &
+            iter, '| Tol: ', maxval(abs(gradient)), '| u:', x
         if (maxval(abs(gradient)) < tol) exit iterationLoop
 
         ! Compute the search direction

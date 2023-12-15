@@ -28,7 +28,7 @@ subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val, w)
 
     ! Output
     real(kind=realType), intent(out) :: val(0:nDim - 1, 0:nPts - 1)
-    real(kind=realType), intent(out) :: w(0:nPts-1)
+    real(kind=realType), intent(out) :: w(0:nPts - 1)
 
     ! Working
     integer :: i, j, istart, ileft
@@ -46,6 +46,7 @@ subroutine evalCurveNURBS(u, knotVec, degree, Pw, nCtl, nDim, nPts, val, w)
         w(i) = val(nDim - 1, i)
         val(:, i) = val(:, i) / val(nDim - 1, i)
     end do
+
 end subroutine evalCurveNURBS
 
 subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, order, nCtl, nDim, ck)
@@ -79,9 +80,9 @@ subroutine derivEvalCurveNURBS(u, knotVec, degree, Pw, order, nCtl, nDim, ck)
         v = ckw(0:nDim - 2, k)
         do i = 1, k
             call bin(k, i, binCoeff)
-            v = v - (binCoeff * ckw(nDim-1, i) * ck(:, k - i))
+            v = v - (binCoeff * ckw(nDim - 1, i) * ck(:, k - i))
         end do
         ck(:, k) = v / ckw(nDim - 1, 0)
     end do
-    
+
 end subroutine derivEvalCurveNURBS
